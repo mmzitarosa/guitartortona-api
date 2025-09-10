@@ -19,7 +19,7 @@ import lombok.Setter;
 	@NotNull(message = "Amount is mandatory")
 	@DecimalMin(value = "0.0", inclusive = false, message = "Amount must be greater than zero")
 	private Double amount;		// Importo totale delle fattura
-	@Size(max = 500, message = "Notes must be at most 500 characters")
-	private String notes;		// Eventuali note
+	@Size(max = 255, message = "Notes must be at most 255 characters")
+	private String notes;			// Eventuali note
 
 }

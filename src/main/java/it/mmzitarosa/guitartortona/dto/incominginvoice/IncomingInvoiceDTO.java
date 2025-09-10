@@ -20,7 +20,9 @@ import lombok.Setter;
 	private String date;			// Data della fattura, già formatta: "22/09/1996"
 	@DecimalMin(value = "0.0", inclusive = false, message = "Amount must be greater than zero")
 	private Double amount;			// Importo totale delle fattura
-	@Size(max = 500, message = "Notes must be at most 500 characters")
+	@Size(max = 255, message = "Notes must be at most 255 characters")
 	private String notes;			// Eventuali note
 
+	public String getDate() { return date; }
+	public void setDate(String date) { this.date = date; }
 }

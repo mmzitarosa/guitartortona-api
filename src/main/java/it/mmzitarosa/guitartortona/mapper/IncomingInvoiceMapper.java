@@ -9,8 +9,8 @@ import org.mapstruct.Mapping;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-@Mapper(componentModel = "spring")
-public interface IncomingInvoiceMapper {
+@Mapper(componentModel = "spring", imports = {SimpleDateFormat.class})
+ public interface IncomingInvoiceMapper {
 
 	@Mapping(target = "date", source = "date", dateFormat = "dd/MM/yyyy")
 	IncomingInvoiceDTO toDTO(IncomingInvoiceEntity entity);

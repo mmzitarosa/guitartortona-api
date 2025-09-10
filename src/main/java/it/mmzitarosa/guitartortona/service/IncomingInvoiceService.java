@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service;
 		this.incomingInvoiceMapper = incomingInvoiceMapper;
 	}
 	
-	public IncomingInvoiceDTO getIncomingInvoiceById(long id) {
+	public IncomingInvoiceDTO readIncomingInvoiceById(long id) {
 		return incomingInvoiceMapper.toDTO(incomingInvoiceRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("IncomingInvoice not found")));
 	}
 

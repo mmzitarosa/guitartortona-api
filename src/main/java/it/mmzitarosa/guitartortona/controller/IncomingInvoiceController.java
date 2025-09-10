@@ -16,11 +16,11 @@ import org.springframework.web.bind.annotation.*;
 
 	@GetMapping("/incomingInvoice/{id}")
 	public IncomingInvoiceDTO readIncomingInvoiceById(@PathVariable long id) {
-		return incomingInvoiceService.getIncomingInvoiceById(id);
+		return incomingInvoiceService.readIncomingInvoiceById(id);
 	}
 	
 	@PostMapping("/incomingInvoice")
-	public IncomingInvoiceDTO createIncomingInvoice(@Valid @RequestBody CreateIncomingInvoiceDTO request) {
+	public IncomingInvoiceDTO createIncomingInvoice(@Valid @RequestBody CreateIncomingInvoiceDTO request) throws InterruptedException {
 		return incomingInvoiceService.createIncomingInvoice(request);
 	}
 	

@@ -19,4 +19,7 @@ import java.util.Date;
 	@Column(nullable = false) private Double amount;
 	private String notes;
 
+	public Date getDate() { return date; }
+
+	public void setDate(Date date) { this.date = date; }
 }
