@@ -1,0 +1,415 @@
+name: CI/CD - Build & Deploy to Staging
+
+on:
+  push:
+    branches:
+      - develop
+      - hotfix
+
+env:
+  JAVA_VERSION: '21'
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.httpconnectionManager.ttlSeconds=120
+  DEPLOY_REPO: mmzitarosa/guitartortona-api-deploy
+
+jobs:
+  # ============================================================================
+  # JOB 1: Validate Branch and Commit Message
+  # ============================================================================
+  validate:
+    name: Validate Branch & Commit
+    runs-on: ubuntu-latest
+    outputs:
+      should_proceed: ${{ steps.check.outputs.proceed }}
+      commit_type: ${{ steps.check.outputs.type }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check branch alignment with main
+        id: branch_check
+        run: |
+          git fetch origin main
+          
+          # Verifica se il branch corrente è allineato o avanti rispetto a main
+          BEHIND=$(git rev-list --count HEAD..origin/main)
+          
+          if [ "$BEHIND" -gt 0 ]; then
+            echo "❌ Branch is $BEHIND commits behind main"
+            echo "Please merge main into your branch first"
+            exit 1
+          fi
+          
+          echo "✅ Branch is aligned with or ahead of main"
+
+      - name: Analyze commit message
+        id: check
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          BRANCH="${{ github.ref_name }}"
+          
+          echo "Branch: $BRANCH"
+          echo "Commit: $COMMIT_MSG"
+          
+          # Check commit message based on branch
+          if [[ "$BRANCH" == "develop" ]]; then
+            if [[ "$COMMIT_MSG" =~ ^RELEASE:|^MAJOR: ]]; then
+              echo "✅ Valid commit on develop: proceeding"
+              echo "proceed=true" >> $GITHUB_OUTPUT
+          
+              if [[ "$COMMIT_MSG" =~ ^MAJOR: ]]; then
+                echo "type=MAJOR" >> $GITHUB_OUTPUT
+              else
+                echo "type=RELEASE" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "ℹ️  Regular commit on develop: skipping pipeline (not a release)"
+              echo "proceed=false" >> $GITHUB_OUTPUT
+            fi
+          
+          elif [[ "$BRANCH" == "hotfix" ]]; then
+            if [[ "$COMMIT_MSG" =~ ^RELEASE: ]]; then
+              echo "✅ Valid RELEASE commit on hotfix: proceeding"
+              echo "proceed=true" >> $GITHUB_OUTPUT
+              echo "type=HOTFIX" >> $GITHUB_OUTPUT
+            elif [[ "$COMMIT_MSG" =~ ^MAJOR: ]]; then
+              echo "❌ MAJOR commits are not allowed on hotfix branch"
+              exit 1
+            else
+              echo "❌ Only RELEASE commits are allowed on hotfix branch"
+              exit 1
+            fi
+          else
+            echo "proceed=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ============================================================================
+  # JOB 2: Calculate New Version
+  # ============================================================================
+  version:
+    name: Calculate Version
+    needs: validate
+    if: needs.validate.outputs.should_proceed == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.calc.outputs.version }}
+      new_tag: ${{ steps.calc.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate new version
+        id: calc
+        run: |
+          COMMIT_TYPE="${{ needs.validate.outputs.commit_type }}"
+          BRANCH="${{ github.ref_name }}"
+          
+          # Get latest production version (tags without -rc)
+          LATEST_PROD=$(git tag -l "v*" | grep -v "\-rc" | sort -V | tail -n1)
+          
+          # Fallback missing tag
+          if [[ -z "$LATEST_PROD" ]]; then
+            echo "No production tags found, starting from v1.0.0"
+            NEW_VERSION="v1.0.0"
+          else
+            echo "Latest production version: $LATEST_PROD"
+
+            # Parse version numbers
+            VERSION=${LATEST_PROD#v}
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          
+            # Calculate new version based on commit type
+            if [[ "$COMMIT_TYPE" == "MAJOR" ]]; then
+              MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+              NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+            elif [[ "$COMMIT_TYPE" == "HOTFIX" ]]; then
+              PATCH=$((PATCH + 1))
+              NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+            else  # RELEASE on develop
+              MINOR=$((MINOR + 1)); PATCH=0
+              NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+            fi
+          fi
+          
+          # Check for existing RC versions
+          RC_COUNT=$(git tag -l "${NEW_VERSION}-rc*" | wc -l)
+          RC_NUM=$((RC_COUNT + 1))
+          NEW_TAG="${NEW_VERSION}-rc${RC_NUM}"
+          echo "📦 New version: $NEW_TAG"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+  # ============================================================================
+  # JOB 3: Run Tests
+  # ============================================================================
+  test:
+    name: Run Unit Tests
+    needs: [ validate, version ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'corretto'
+          cache: 'maven'
+
+      - name: Set Maven version
+        run: |
+          ./mvnw versions:set -DnewVersion=${{ needs.version.outputs.new_tag }} -DgenerateBackupPoms=false
+
+      - name: Run tests
+        run: ./mvnw test --batch-mode --no-transfer-progress
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: target/surefire-reports/*.xml
+
+  # ============================================================================
+  # JOB 4: Build JAR
+  # ============================================================================
+  build:
+    name: Build Application
+    needs: [ validate, version, test ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'corretto'
+          cache: 'maven'
+
+      - name: Set Maven version
+        run: |
+          ./mvnw versions:set -DnewVersion=${{ needs.version.outputs.new_tag }} -DgenerateBackupPoms=false
+          echo "Updated pom.xml version to ${{ needs.version.outputs.new_tag }}"
+
+      - name: Build with Maven
+        run: |
+          ./mvnw clean package -DskipTests --batch-mode --no-transfer-progress
+          
+          # Verify JAR was created
+          JAR_FILE=$(ls target/*.jar | grep -v original)
+          echo "Built JAR: $JAR_FILE"
+          ls -lh "$JAR_FILE"
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-jar
+          path: target/*.jar
+          retention-days: 30
+
+  # ============================================================================
+  # JOB 5: Build and Push Docker Image
+  # ============================================================================
+  docker:
+    name: Build & Push Docker Image
+    needs: [ validate, version, build ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: application-jar
+          path: target/
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ needs.version.outputs.new_tag }}
+            type=raw,value=staging
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.version.outputs.new_tag }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+
+  # ============================================================================
+  # JOB 6: Update Deployment Repository
+  # ============================================================================
+  update-deploy-repo:
+    name: Update Deployment Config
+    needs: [ validate, version, build, docker ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deployment repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DEPLOY_REPO }}
+          token: ${{ secrets.DEPLOY_REPO_TOKEN }}
+          path: deploy-repo
+
+      - name: Update staging kustomization
+        run: |
+          cd deploy-repo/overlays/staging
+          
+          NEW_TAG="${{ needs.version.outputs.new_tag }}"
+          
+          # Update the newTag in kustomization.yaml
+          sed -i "s/newTag: .*/newTag: $NEW_TAG/" kustomization.yaml
+          
+          echo "Updated kustomization.yaml:"
+          cat kustomization.yaml | grep -A 2 "images:"
+
+      - name: Commit and push changes
+        run: |
+          cd deploy-repo
+          
+          NEW_TAG="${{ needs.version.outputs.new_tag }}"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if there are changes
+          if git diff --quiet overlays/staging/kustomization.yaml; then
+            echo "⚠️  No changes to commit"
+          else
+            git add overlays/staging/kustomization.yaml
+            git commit -m "chore: update staging to $NEW_TAG
+
+            Promoted from: ${{ github.ref_name }}
+            Source: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+            Workflow: ${{ github.run_id }}"
+
+            git push
+            echo "✅ Deployment configuration updated to $NEW_TAG"
+          fi
+
+  # ============================================================================
+  # JOB 7: Create Git Tag and GitHub Release
+  # ============================================================================
+  release:
+    name: Create Release
+    needs: [ validate, version, build, docker, update-deploy-repo ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: application-jar
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.version.outputs.new_tag }}
+          name: ${{ needs.version.outputs.new_tag }} - Staging Release
+          body: |
+            ## 🧪 Staging Release Candidate
+            
+            **Version:** `${{ needs.version.outputs.new_tag }}`
+            **Branch:** `${{ github.ref_name }}`
+            **Commit:** `${{ github.sha }}`
+            **Commit Type:** `${{ needs.validate.outputs.commit_type }}`
+            
+            ### 📦 Docker Images
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ needs.version.outputs.new_tag }}
+            docker pull ghcr.io/${{ github.repository }}:staging
+            ```
+            
+            ### 🎯 Deployment
+            This version has been deployed to **Staging** environment for testing.
+            
+            - **Staging API:** https://api-staging.guitar.lab
+            - **ArgoCD:** https://argocd.guitar.lab
+            - **Grafana:** https://grafana.guitar.lab
+            
+            ### 📋 Artifacts
+            - Application JAR (built with Maven)
+            
+            ### ⚠️ Release Candidate
+            This is a staging release candidate. After testing, promote to production using the **"Promote to Production"** workflow.
+            
+            ### 🚀 Promote to Production
+            When ready, go to Actions → Promote to Production and provide this RC tag: `${{ needs.version.outputs.new_tag }}`
+          prerelease: true
+          files: |
+            artifacts/*.jar
+          generate_release_notes: true
+
+  # ============================================================================
+  # JOB 8: Notify on Deployment
+  # ============================================================================
+  notify:
+    name: Deployment Complete
+    needs: [ validate, version, release, update-deploy-repo ]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "## 🚀 Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ needs.version.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ✅ Deployed to Staging" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Staging API](https://api-staging.guitar.lab)" >> $GITHUB_STEP_SUMMARY
+          echo "- [ArgoCD](https://argocd.guitar.lab)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Grafana](https://grafana.guitar.lab)" >> $GITHUB_STEP_SUMMARY
+          echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.version.outputs.new_tag }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Docker Image" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "ghcr.io/${{ github.repository }}:${{ needs.version.outputs.new_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "After testing in staging, promote to production:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to Actions → Promote to Production" >> $GITHUB_STEP_SUMMARY
+          echo "2. Run workflow with RC tag: \`${{ needs.version.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY

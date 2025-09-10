@@ -5,6 +5,4 @@ spring:
     password: mypass
     driver-class-name: org.mariadb.jdbc.Driver
   jpa:
-    hibernate:
-      ddl-auto: update
     show-sql: true

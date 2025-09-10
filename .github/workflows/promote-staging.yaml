@@ -1,0 +1,156 @@
+name: Promote to Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      rc_tag:
+        description: 'RC Tag to promote (e.g., v1.4.0-rc1)'
+        required: true
+        type: string
+
+env:
+  DEPLOY_REPO: mmzitarosa/guitartortona-api-deploy
+
+jobs:
+  # ============================================================================
+  # JOB 1: Validate RC Tag
+  # ============================================================================
+  validate:
+    name: Validate RC Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate RC tag exists
+        id: validate
+        run: |
+          RC_TAG="${{ inputs.rc_tag }}"
+          
+          # Check if tag exists
+          if ! git rev-parse "$RC_TAG" >/dev/null 2>&1; then
+            echo "❌ Tag $RC_TAG does not exist"
+            exit 1
+          fi
+          
+          # Validate tag format (must be -rcN)
+          if [[ ! "$RC_TAG" =~ -rc[0-9]+$ ]]; then
+            echo "❌ Tag must be a release candidate (format: vX.Y.Z-rcN)"
+            exit 1
+          fi
+          
+          echo "✅ Tag $RC_TAG is valid"
+
+  # ============================================================================
+  # JOB 2: Re-tag Docker Images
+  # ============================================================================
+  retag-docker:
+    name: Re-tag Docker Images
+    needs: [validate]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull RC image
+        run: |
+          RC_TAG="${{ inputs.rc_tag }}"
+          docker pull ghcr.io/${{ github.repository }}:$RC_TAG
+
+      - name: Re-tag for staging
+        run: |
+          RC_TAG="${{ inputs.rc_tag }}"
+          
+          # Tag as staging
+          docker tag \
+            ghcr.io/${{ github.repository }}:$RC_TAG \
+            ghcr.io/${{ github.repository }}:staging
+          
+          echo "✅ Image re-tagged:"
+          echo "  - staging"
+
+      - name: Push staging images
+        run: |          
+          docker push ghcr.io/${{ github.repository }}:staging
+          
+          echo "✅ Image pushed to registry"
+
+  # ============================================================================
+  # JOB 3: Update Deployment Repository
+  # ============================================================================
+  update-deploy-repo:
+    name: Update Deployment Config
+    needs: [validate, retag-docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deployment repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DEPLOY_REPO }}
+          token: ${{ secrets.DEPLOY_REPO_TOKEN }}
+          path: deploy-repo
+
+      - name: Update staging kustomization
+        run: |
+          cd deploy-repo/overlays/staging
+          
+          RC_TAG="${{ inputs.rc_tag }}"
+          
+          # Update the newTag in kustomization.yaml
+          sed -i "s/newTag: .*/newTag: $RC_TAG/" kustomization.yaml
+          
+          echo "Updated kustomization.yaml:"
+          cat kustomization.yaml | grep -A 2 "images:"
+
+      - name: Commit and push changes
+        run: |
+          cd deploy-repo
+          
+          RC_TAG="${{ inputs.rc_tag }}"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if there are changes
+          if git diff --quiet overlays/staging/kustomization.yaml; then
+            echo "⚠️  No changes to commit"
+          else
+            git add overlays/staging/kustomization.yaml
+            git commit -m "chore: promote staging to $RC_TAG
+          
+            Promoted from RC: $RC_TAG
+            Source: ${{ github.repository }}
+            Workflow: ${{ github.run_id }}"
+          
+            git push
+            echo "✅ Deployment configuration updated to $RC_TAG"
+          fi
+
+  # ============================================================================
+  # JOB 4: Notify Completion
+  # ============================================================================
+  notify:
+    name: Promotion Complete
+    needs: [validate, retag-docker, update-deploy-repo]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Staging promotion summary
+        run: |
+          echo "## 🔄 Staging Re-deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**RC Version:** \`${{ inputs.rc_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ✅ Re-deployed to Staging" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Staging API](https://api-staging.guitar.lab)" >> $GITHUB_STEP_SUMMARY
+          echo "- [ArgoCD](https://argocd.guitar.lab)" >> $GITHUB_STEP_SUMMARY
+          echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ inputs.rc_tag }})" >> $GITHUB_STEP_SUMMARY

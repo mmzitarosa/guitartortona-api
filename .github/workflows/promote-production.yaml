@@ -1,0 +1,391 @@
+name: Promote to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      rc_tag:
+        description: 'RC Tag to promote (e.g., v1.4.0-rc1)'
+        required: true
+        type: string
+
+env:
+  DEPLOY_REPO: mmzitarosa/guitartortona-api-deploy
+
+jobs:
+  # ============================================================================
+  # JOB 1: Validate RC Tag
+  # ============================================================================
+  validate:
+    name: Validate RC Tag
+    runs-on: ubuntu-latest
+    outputs:
+      prod_version: ${{ steps.calc.outputs.version }}
+      prod_tag: ${{ steps.calc.outputs.tag }}
+      source_branch: ${{ steps.source.outputs.branch }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate RC tag exists
+        id: validate
+        run: |
+          RC_TAG="${{ inputs.rc_tag }}"
+          
+          # Check if tag exists
+          if ! git rev-parse "$RC_TAG" >/dev/null 2>&1; then
+            echo "❌ Tag $RC_TAG does not exist"
+            exit 1
+          fi
+          
+          # Validate tag format (must be -rcN)
+          if [[ ! "$RC_TAG" =~ -rc[0-9]+$ ]]; then
+            echo "❌ Tag must be a release candidate (format: vX.Y.Z-rcN)"
+            exit 1
+          fi
+          
+          echo "✅ Tag $RC_TAG is valid"
+
+      - name: Calculate production version
+        id: calc
+        run: |
+          RC_TAG="${{ inputs.rc_tag }}"
+          
+          # Remove -rcN suffix to get production version
+          PROD_VERSION="${RC_TAG%-rc*}"
+          
+          # Check if production version already exists
+          if git rev-parse "$PROD_VERSION" >/dev/null 2>&1; then
+            echo "❌ Production version $PROD_VERSION already exists"
+            echo "This RC has already been promoted or there's a version conflict"
+            exit 1
+          fi
+          
+          echo "📦 Production version: $PROD_VERSION"
+          echo "version=${PROD_VERSION#v}" >> $GITHUB_OUTPUT
+          echo "tag=$PROD_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Identify source branch
+        id: source
+        run: |
+          RC_TAG="${{ inputs.rc_tag }}"
+          
+          # Get the commit SHA of the RC tag
+          TAG_COMMIT=$(git rev-list -n 1 "$RC_TAG")
+          
+          # Find which branch contains this commit
+          BRANCHES=$(git branch -r --contains "$TAG_COMMIT" | grep -v HEAD || true)
+          
+          if echo "$BRANCHES" | grep -q "origin/hotfix"; then
+            SOURCE_BRANCH="hotfix"
+          elif echo "$BRANCHES" | grep -q "origin/develop"; then
+            SOURCE_BRANCH="develop"
+          else
+            echo "⚠️  Could not determine source branch, defaulting to develop"
+            SOURCE_BRANCH="develop"
+          fi
+          
+          echo "Source branch: $SOURCE_BRANCH"
+          echo "branch=$SOURCE_BRANCH" >> $GITHUB_OUTPUT
+
+  # ============================================================================
+  # JOB 2: Re-tag Docker Images
+  # ============================================================================
+  retag-docker:
+    name: Re-tag Docker Images
+    needs: [validate]
+    if: |
+      always() && 
+      needs.validate.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull RC image
+        run: |
+          RC_TAG="${{ inputs.rc_tag }}"
+          docker pull ghcr.io/${{ github.repository }}:$RC_TAG
+
+      - name: Re-tag for production
+        run: |
+          RC_TAG="${{ inputs.rc_tag }}"
+          PROD_TAG="${{ needs.validate.outputs.prod_tag }}"
+          
+          # Tag as production version
+          docker tag \
+            ghcr.io/${{ github.repository }}:$RC_TAG \
+            ghcr.io/${{ github.repository }}:$PROD_TAG
+          
+          # Tag as latest
+          docker tag \
+            ghcr.io/${{ github.repository }}:$RC_TAG \
+            ghcr.io/${{ github.repository }}:latest
+          
+          echo "✅ Images re-tagged:"
+          echo "  - $PROD_TAG"
+          echo "  - latest"
+
+      - name: Push production images
+        run: |
+          PROD_TAG="${{ needs.validate.outputs.prod_tag }}"
+          
+          docker push ghcr.io/${{ github.repository }}:$PROD_TAG
+          docker push ghcr.io/${{ github.repository }}:latest
+          
+          echo "✅ Images pushed to registry"
+
+  # ============================================================================
+  # JOB 3: Update Deployment Repository
+  # ============================================================================
+  update-deploy-repo:
+    name: Update Deployment Config
+    needs: [validate, retag-docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deployment repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DEPLOY_REPO }}
+          token: ${{ secrets.DEPLOY_REPO_TOKEN }}
+          path: deploy-repo
+
+      - name: Update production kustomization
+        run: |
+          cd deploy-repo/overlays/production
+          
+          PROD_TAG="${{ needs.validate.outputs.prod_tag }}"
+          
+          # Update the newTag in kustomization.yaml
+          sed -i "s/newTag: .*/newTag: $PROD_TAG/" kustomization.yaml
+          
+          echo "Updated kustomization.yaml:"
+          cat kustomization.yaml | grep -A 2 "images:"
+
+      - name: Commit and push changes
+        run: |
+          cd deploy-repo
+          
+          PROD_TAG="${{ needs.validate.outputs.prod_tag }}"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add overlays/production/kustomization.yaml
+          git commit -m "chore: promote production to $PROD_TAG
+          
+          Promoted from RC: ${{ inputs.rc_tag }}
+          Source: ${{ github.repository }}
+          Workflow: ${{ github.run_id }}"
+          
+          git push
+          
+          echo "✅ Deployment configuration updated"
+
+  # ============================================================================
+  # JOB 4: Create Production Tag and Release
+  # ============================================================================
+  create-release:
+    name: Create Production Release
+    needs: [validate, update-deploy-repo]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.rc_tag }}
+
+      - name: Download artifacts from RC release
+        run: |
+          RC_TAG="${{ inputs.rc_tag }}"
+          
+          # Create artifacts directory
+          mkdir -p artifacts
+          
+          # Download release assets using GitHub CLI
+          gh release download "$RC_TAG" --dir artifacts/ --pattern "*.jar"
+          
+          echo "Downloaded artifacts:"
+          ls -lh artifacts/
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate.outputs.prod_tag }}
+          name: ${{ needs.validate.outputs.prod_tag }} - Production Release
+          body: |
+            ## 🚀 Production Release
+            
+            **Version:** `${{ needs.validate.outputs.prod_tag }}`
+            **Promoted from:** `${{ inputs.rc_tag }}`
+            **Source Branch:** `${{ needs.validate.outputs.source_branch }}`
+            
+            ### 📦 Docker Images
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ needs.validate.outputs.prod_tag }}
+            docker pull ghcr.io/${{ github.repository }}:latest
+            ```
+            
+            ### 🎯 Deployment
+            This version has been deployed to **Production** environment.
+            
+            - **Production URL:** https://api.guitar.lab
+            - **ArgoCD:** https://argocd.guitar.lab/applications/guitartortona-api-production
+            - **Grafana:** https://grafana.guitar.lab
+            
+            ### 📋 Artifacts
+            - Application JAR (from staging release)
+            
+            ### ⚠️ Deployment Notes
+            ArgoCD is configured with **manual sync** for production.
+            Please go to ArgoCD UI and click **"Sync"** to deploy this version.
+            
+            ### 📝 Release Notes
+            This production release was tested and validated in staging environment before promotion.
+          prerelease: false
+          files: |
+            artifacts/*.jar
+          generate_release_notes: true
+
+  # ============================================================================
+  # JOB 5: Merge Source Branch to Main and Create PRs
+  # ============================================================================
+  merge-and-create-prs:
+    name: Merge to Main & Create PRs
+    needs: [validate, create-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge source branch into main
+        run: |
+          SOURCE_BRANCH="${{ needs.validate.outputs.source_branch }}"
+          PROD_TAG="${{ needs.validate.outputs.prod_tag }}"
+          
+          echo "Merging $SOURCE_BRANCH into main..."
+          
+          git fetch origin
+          git checkout main
+          git pull origin main
+          
+          # Merge with no-ff to keep history
+          git merge "origin/$SOURCE_BRANCH" --no-ff -m "chore: merge $SOURCE_BRANCH for production release $PROD_TAG"
+          
+          git push origin main
+          echo "✅ Merged $SOURCE_BRANCH into main"
+
+      - name: Create Pull Request for develop
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: sync/main-to-develop-${{ github.run_number }}
+          base: develop
+          title: "chore: sync main into develop after production release ${{ needs.validate.outputs.prod_tag }}"
+          body: |
+            ## 🔄 Sync Main → Develop
+            
+            This PR synchronizes `main` branch into `develop` after production release **${{ needs.validate.outputs.prod_tag }}**.
+            
+            ### 📦 Released Version
+            - **Production Tag:** `${{ needs.validate.outputs.prod_tag }}`
+            - **RC Tag:** `${{ inputs.rc_tag }}`
+            - **Source Branch:** `${{ needs.validate.outputs.source_branch }}`
+            
+            ### ⚠️ Action Required
+            Please review and resolve any conflicts, then merge this PR to keep develop in sync with production.
+            
+            ### 🔗 Links
+            - [Production Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.prod_tag }})
+            - [Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          labels: |
+            sync
+            automated-pr
+          reviewers: ${{ github.actor }}
+
+      - name: Create Pull Request for hotfix
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: sync/main-to-hotfix-${{ github.run_number }}
+          base: hotfix
+          title: "chore: sync main into hotfix after production release ${{ needs.validate.outputs.prod_tag }}"
+          body: |
+            ## 🔄 Sync Main → Hotfix
+            
+            This PR synchronizes `main` branch into `hotfix` after production release **${{ needs.validate.outputs.prod_tag }}**.
+            
+            ### 📦 Released Version
+            - **Production Tag:** `${{ needs.validate.outputs.prod_tag }}`
+            - **RC Tag:** `${{ inputs.rc_tag }}`
+            - **Source Branch:** `${{ needs.validate.outputs.source_branch }}`
+            
+            ### ⚠️ Action Required
+            Please review and resolve any conflicts, then merge this PR to keep hotfix in sync with production.
+            
+            ### 🔗 Links
+            - [Production Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.prod_tag }})
+            - [Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          labels: |
+            sync
+            automated-pr
+          reviewers: ${{ github.actor }}
+
+  # ============================================================================
+  # JOB 6: Notify Completion
+  # ============================================================================
+  notify:
+    name: Promotion Complete
+    needs: [validate, retag-docker, update-deploy-repo, create-release, merge-and-create-prs]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Production promotion summary
+        run: |
+          echo "## 🎉 Production Promotion Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**RC Version:** \`${{ inputs.rc_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Production Version:** \`${{ needs.validate.outputs.prod_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Source Branch:** \`${{ needs.validate.outputs.source_branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Completed Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker images re-tagged and pushed" >> $GITHUB_STEP_SUMMARY
+          echo "- Deployment configuration updated" >> $GITHUB_STEP_SUMMARY
+          echo "- Production release created with JAR artifact" >> $GITHUB_STEP_SUMMARY
+          echo "- Source branch merged into main" >> $GITHUB_STEP_SUMMARY
+          echo "- Pull Requests created for develop and hotfix sync" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to [ArgoCD Production App](https://argocd.guitar.lab/applications/guitartortona-api-production)" >> $GITHUB_STEP_SUMMARY
+          echo "2. Click **Sync** to deploy \`${{ needs.validate.outputs.prod_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "3. Monitor deployment in [Grafana](https://grafana.guitar.lab)" >> $GITHUB_STEP_SUMMARY
+          echo "4. **Review and merge** the sync PRs for develop and hotfix" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Production API](https://api.guitar.lab)" >> $GITHUB_STEP_SUMMARY
+          echo "- [ArgoCD](https://argocd.guitar.lab)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Pull Requests](https://github.com/${{ github.repository }}/pulls?q=is%3Apr+label%3Async)" >> $GITHUB_STEP_SUMMARY
+          echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.prod_tag }})" >> $GITHUB_STEP_SUMMARY
