@@ -1,7 +1,6 @@
-version: "3.8"
 services:
   mariadb:
-    image: mariadb:latest
+    image: mariadb:11
     container_name: mariadb-guitartortona-local
     environment:
       MARIADB_ROOT_PASSWORD: rootpass
