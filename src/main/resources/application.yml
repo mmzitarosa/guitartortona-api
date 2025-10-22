@@ -21,4 +21,4 @@ spring:
 logging:
   file:
     name: logs/app.log
-    path: logs      
+    path: logs

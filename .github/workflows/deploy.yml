@@ -45,6 +45,7 @@ jobs:
 
       - name: Deploy to Kubernetes
         run: |
-          kubectl set image deployment/guitartortona-api \
+          # Usa microk8s kubectl dal host
+          /snap/bin/microk8s kubectl set image deployment/guitartortona-api \
             guitartortona-api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
             -n default
