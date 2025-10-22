@@ -43,9 +43,17 @@ jobs:
           docker push $IMAGE_TAG
           docker push $IMAGE_LATEST
 
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
       - name: Deploy to Kubernetes
         run: |
-          # Usa microk8s kubectl dal host
-          /snap/bin/microk8s kubectl set image deployment/guitartortona-api \
+          kubectl set image deployment/guitartortona-api \
             guitartortona-api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
             -n default
+          
+          # Aspetta che il rollout sia completato
+          kubectl rollout status deployment/guitartortona-api -n default
