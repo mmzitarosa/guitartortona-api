@@ -1,0 +1,245 @@
+name: Promote to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_version:
+        description: 'Staging version to promote (e.g., 1.3.0-rc3)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      prod_version: ${{ steps.version.outputs.prod_version }}
+      source_branch: ${{ steps.branch.outputs.source_branch }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate version format
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.staging_version }}"
+          
+          # Validate format X.Y.Z-rcN
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$ ]]; then
+            echo "❌ Error: Invalid version format. Must be X.Y.Z-rcN"
+            exit 1
+          fi
+          
+          # Extract production version (remove -rc suffix)
+          PROD_VERSION=${VERSION%-rc*}
+          echo "prod_version=$PROD_VERSION" >> $GITHUB_OUTPUT
+          echo "staging_version=$VERSION" >> $GITHUB_OUTPUT
+          
+          echo "✅ Staging version: $VERSION"
+          echo "✅ Production version: $PROD_VERSION"
+
+      - name: Verify tag exists
+        run: |
+          VERSION="${{ github.event.inputs.staging_version }}"
+          
+          if ! git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            echo "❌ Error: Tag v${VERSION} does not exist"
+            exit 1
+          fi
+          
+          echo "✅ Tag v${VERSION} exists"
+
+      - name: Verify Docker image exists
+        run: |
+          VERSION="${{ github.event.inputs.staging_version }}"
+          
+          # Login to GHCR
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+          
+          # Try to pull image
+          if ! docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}; then
+            echo "❌ Error: Docker image ${VERSION} does not exist in registry"
+            exit 1
+          fi
+          
+          echo "✅ Docker image ${VERSION} exists"
+
+      - name: Determine source branch
+        id: branch
+        run: |
+          VERSION="${{ github.event.inputs.staging_version }}"
+          
+          # Find commit associated with tag
+          TAG_COMMIT=$(git rev-list -n 1 "v${VERSION}")
+          
+          # Check if it's from hotfix or develop
+          if git branch -r --contains $TAG_COMMIT | grep -q "origin/hotfix"; then
+            SOURCE_BRANCH="hotfix"
+          else
+            SOURCE_BRANCH="develop"
+          fi
+          
+          echo "source_branch=$SOURCE_BRANCH" >> $GITHUB_OUTPUT
+          echo "✅ Source branch: $SOURCE_BRANCH"
+
+  promote:
+    needs: validate
+    runs-on: [self-hosted, linux, k8s]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag Docker image for production
+        run: |
+          STAGING_VERSION="${{ github.event.inputs.staging_version }}"
+          PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
+          
+          STAGING_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${STAGING_VERSION}
+          PROD_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PROD_VERSION}
+          LATEST_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          
+          # Login
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+          
+          # Pull staging image
+          docker pull $STAGING_IMAGE
+          
+          # Retag for production
+          docker tag $STAGING_IMAGE $PROD_IMAGE
+          docker tag $STAGING_IMAGE $LATEST_IMAGE
+          
+          # Push production tags
+          docker push $PROD_IMAGE
+          docker push $LATEST_IMAGE
+          
+          echo "✅ Retagged images:"
+          echo "  - $PROD_IMAGE"
+          echo "  - $LATEST_IMAGE"
+
+      - name: Install kubectl
+        run: |
+          if ! command -v kubectl &> /dev/null; then
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+
+      - name: Deploy to Production
+        run: |
+          PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
+          
+          kubectl set image deployment/guitartortona-api \
+            guitartortona-api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PROD_VERSION} \
+            -n default
+          
+          kubectl rollout status deployment/guitartortona-api -n default --timeout=300s
+          
+          echo "✅ Deployed version $PROD_VERSION to production"
+
+      - name: Merge source branch to main
+        run: |
+          SOURCE_BRANCH="${{ needs.validate.outputs.source_branch }}"
+          PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
+          
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          # Fetch source branch
+          git fetch origin $SOURCE_BRANCH
+          
+          # Merge into main
+          git checkout main
+          git merge origin/$SOURCE_BRANCH -m "chore: release v${PROD_VERSION}
+
+          Promoted from staging: ${{ github.event.inputs.staging_version }}
+          Source branch: ${SOURCE_BRANCH}
+          "
+          
+          git push origin main
+          
+          echo "✅ Merged $SOURCE_BRANCH into main"
+
+      - name: Create production tag
+        run: |
+          PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
+          STAGING_VERSION="${{ github.event.inputs.staging_version }}"
+          SOURCE_BRANCH="${{ needs.validate.outputs.source_branch }}"
+          
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          # Create annotated production tag
+          git tag -a "v${PROD_VERSION}" -m "Production Release v${PROD_VERSION}
+
+          🚀 Promoted from staging: v${STAGING_VERSION}
+          📦 Source branch: ${SOURCE_BRANCH}
+          
+          🌐 Production: https://api.guitar.lab
+          🐳 Docker Images:
+             - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PROD_VERSION}
+             - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          "
+          
+          git push origin "v${PROD_VERSION}"
+          
+          echo "✅ Created production tag: v${PROD_VERSION}"
+
+      - name: Sync develop with main
+        run: |
+          PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
+          
+          git fetch origin develop
+          git checkout develop
+          git merge origin/main -m "chore: sync develop with production v${PROD_VERSION}"
+          git push origin develop
+          
+          echo "✅ Synced develop with main"
+
+      - name: Sync hotfix with main
+        run: |
+          PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
+          
+          git fetch origin hotfix
+          git checkout hotfix
+          git merge origin/main -m "chore: sync hotfix with production v${PROD_VERSION}"
+          git push origin hotfix
+          
+          echo "✅ Synced hotfix with main"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ needs.validate.outputs.prod_version }}
+          release_name: Release v${{ needs.validate.outputs.prod_version }}
+          body: |
+            ## 🚀 Production Release v${{ needs.validate.outputs.prod_version }}
+            
+            **Promoted from staging:** `${{ github.event.inputs.staging_version }}`  
+            **Source branch:** `${{ needs.validate.outputs.source_branch }}`
+            
+            ### 🌐 Deployment
+            - **Production URL:** https://api.guitar.lab
+            - **Staging URL:** https://api-staging.guitar.lab
+            
+            ### 📦 Docker Images
+            ```
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.prod_version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ```
+  
+            ### 📝 Changelog
+            See commits between tags for detailed changes.
+          draft: false
+          prerelease: false

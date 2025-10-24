@@ -1,0 +1,286 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - develop
+      - hotfix
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  check-commit-type:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+      version_type: ${{ steps.check.outputs.version_type }}
+      is_major: ${{ steps.check.outputs.is_major }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commit message
+        id: check
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          
+          echo "Commit message: $COMMIT_MSG"
+          echo "Branch: $BRANCH_NAME"
+          
+          # Hotfix può solo RELEASE
+          if [[ "$BRANCH_NAME" == "hotfix" ]]; then
+            if [[ $COMMIT_MSG =~ ^RELEASE:.*$ ]]; then
+              echo "should_deploy=true" >> $GITHUB_OUTPUT
+              echo "version_type=patch" >> $GITHUB_OUTPUT
+              echo "is_major=false" >> $GITHUB_OUTPUT
+            else
+              echo "should_deploy=false" >> $GITHUB_OUTPUT
+            fi
+          # Develop può RELEASE o MAJOR
+          elif [[ "$BRANCH_NAME" == "develop" ]]; then
+            if [[ $COMMIT_MSG =~ ^MAJOR:.*$ ]]; then
+              echo "should_deploy=true" >> $GITHUB_OUTPUT
+              echo "version_type=major" >> $GITHUB_OUTPUT
+              echo "is_major=true" >> $GITHUB_OUTPUT
+            elif [[ $COMMIT_MSG =~ ^RELEASE:.*$ ]]; then
+              echo "should_deploy=true" >> $GITHUB_OUTPUT
+              echo "version_type=minor" >> $GITHUB_OUTPUT
+              echo "is_major=false" >> $GITHUB_OUTPUT
+            else
+              echo "should_deploy=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+  check-branch-alignment:
+    needs: check-commit-type
+    if: needs.check-commit-type.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check branch is not behind main
+        run: |
+          git fetch origin main
+          
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          BEHIND=$(git rev-list --count HEAD..origin/main)
+          
+          if [ $BEHIND -gt 0 ]; then
+            echo "❌ Error: $BRANCH_NAME is $BEHIND commits behind main!"
+            echo "Please merge main into $BRANCH_NAME first."
+            exit 1
+          fi
+          
+          echo "✅ $BRANCH_NAME is aligned with or ahead of main"
+
+  create-versioned-branches:
+    needs: [ check-commit-type, check-branch-alignment ]
+    if: needs.check-commit-type.outputs.is_major == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create versioned branches for previous major
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          # Get current version from last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          CURRENT_VERSION=$(echo $LAST_TAG | sed 's/^v//' | sed 's/-rc[0-9]*$//')
+          
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          
+          echo "Current version: $CURRENT_VERSION (Major: $MAJOR)"
+          
+          # Commit BEFORE the MAJOR commit (parent)
+          FREEZE_COMMIT=$(git rev-parse HEAD^)
+          
+          echo "Freezing at commit: $FREEZE_COMMIT"
+          
+          # Create versioned branches
+          git branch "v${MAJOR}/main" origin/main
+          git branch "v${MAJOR}/develop" $FREEZE_COMMIT
+          git branch "v${MAJOR}/hotfix" origin/hotfix
+          
+          # Push versioned branches
+          git push origin "v${MAJOR}/main"
+          git push origin "v${MAJOR}/develop"
+          git push origin "v${MAJOR}/hotfix"
+          
+          echo "✅ Created branches: v${MAJOR}/main, v${MAJOR}/develop, v${MAJOR}/hotfix"
+
+  build-and-deploy:
+    needs: [ check-commit-type, check-branch-alignment ]
+    if: needs.check-commit-type.outputs.should_deploy == 'true'
+    runs-on: [ self-hosted, linux, k8s ]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate version from git tags
+        id: version
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          VERSION_TYPE="${{ needs.check-commit-type.outputs.version_type }}"
+          
+          echo "Branch: $BRANCH_NAME"
+          echo "Version type: $VERSION_TYPE"
+          
+          # Find last production tag (without -rc)
+          LAST_PROD_TAG=$(git tag -l "v*" --sort=-v:refname | grep -v "rc" | head -1 || echo "v0.0.0")
+          echo "Last production tag: $LAST_PROD_TAG"
+          
+          # Parse version
+          BASE_VERSION=$(echo $LAST_PROD_TAG | sed 's/^v//')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+          
+          echo "Parsed version - Major: $MAJOR, Minor: $MINOR, Patch: $PATCH"
+          
+          # Calculate new version based on type
+          case $VERSION_TYPE in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "New base version: $NEW_VERSION"
+          
+          # Find next RC number
+          RC_NUM=1
+          while git rev-parse "v${NEW_VERSION}-rc${RC_NUM}" >/dev/null 2>&1; do
+            RC_NUM=$((RC_NUM + 1))
+          done
+          
+          FULL_VERSION="${NEW_VERSION}-rc${RC_NUM}"
+          echo "Full version with RC: $FULL_VERSION"
+          
+          # Output for next steps
+          echo "version=$FULL_VERSION" >> $GITHUB_OUTPUT
+          echo "base_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "rc_num=$RC_NUM" >> $GITHUB_OUTPUT
+
+      - name: Set up Amazon Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+          cache: maven
+
+      - name: Update Maven version
+        run: |
+          ./mvnw versions:set -DnewVersion=${{ steps.version.outputs.version }}
+          ./mvnw versions:commit
+
+      - name: Build with Maven
+        run: ./mvnw clean package -DskipTests
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          IMAGE_TAG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}
+          IMAGE_STAGING=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging
+          
+          docker build -t $IMAGE_TAG -t $IMAGE_STAGING .
+          docker push $IMAGE_TAG
+          docker push $IMAGE_STAGING
+          
+          echo "✅ Pushed images:"
+          echo "  - $IMAGE_TAG"
+          echo "  - $IMAGE_STAGING"
+
+      - name: Install kubectl
+        run: |
+          if ! command -v kubectl &> /dev/null; then
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+
+      - name: Deploy to Kubernetes Staging
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          
+          kubectl set image deployment/guitartortona-api \
+            guitartortona-api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION} \
+            -n staging
+          
+          kubectl rollout status deployment/guitartortona-api -n staging --timeout=300s
+          
+          echo "✅ Deployed version $VERSION to staging"
+
+      - name: Create git tag
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          git tag -a "v${VERSION}" -m "Staging release v${VERSION}
+          
+          Branch: ${BRANCH_NAME}
+          Commit: ${GITHUB_SHA}
+          
+          Deployed to: https://api-staging.guitar.lab
+          Docker Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}
+          "
+          
+          git push origin "v${VERSION}"
+          
+          echo "✅ Created tag: v${VERSION}"
+
+      - name: Comment on commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: `🚀 **Deployed to Staging**
+            
+              **Version:** \`${{ steps.version.outputs.version }}\`
+              **Environment:** https://api-staging.guitar.lab
+              **Docker Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}\`
+            
+              ### ✅ Next Steps:
+              1. Test thoroughly on staging
+              2. Go to [Actions → Promote to Production](https://github.com/${{ github.repository }}/actions/workflows/promote-production.yml)
+              3. Run workflow with version: \`${{ steps.version.outputs.version }}\`
+              `
+            })
