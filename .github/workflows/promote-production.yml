@@ -88,17 +88,10 @@ jobs:
           echo "source_branch=$SOURCE_BRANCH" >> $GITHUB_OUTPUT
           echo "✅ Source branch: $SOURCE_BRANCH"
 
-  promote:
+  deploy-production:
     needs: validate
     runs-on: [self-hosted, linux, k8s]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Retag Docker image for production
         run: |
           STAGING_VERSION="${{ github.event.inputs.staging_version }}"
@@ -146,30 +139,17 @@ jobs:
           
           echo "✅ Deployed version $PROD_VERSION to production"
 
-      - name: Merge source branch to main
-        run: |
-          SOURCE_BRANCH="${{ needs.validate.outputs.source_branch }}"
-          PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
-          
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          
-          # Fetch source branch
-          git fetch origin $SOURCE_BRANCH
-          
-          # Merge into main
-          git checkout main
-          git merge origin/$SOURCE_BRANCH -m "chore: release v${PROD_VERSION}
+  create-release-pr:
+    needs: [validate, deploy-production]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.source_branch }}
+          fetch-depth: 0
 
-          Promoted from staging: ${{ github.event.inputs.staging_version }}
-          Source branch: ${SOURCE_BRANCH}
-          "
-          
-          git push origin main
-          
-          echo "✅ Merged $SOURCE_BRANCH into main"
-
-      - name: Create production tag
+      - name: Create production tag on source branch
         run: |
           PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
           STAGING_VERSION="${{ github.event.inputs.staging_version }}"
@@ -178,7 +158,6 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           
-          # Create annotated production tag
           git tag -a "v${PROD_VERSION}" -m "Production Release v${PROD_VERSION}
 
           🚀 Promoted from staging: v${STAGING_VERSION}
@@ -194,13 +173,91 @@ jobs:
           
           echo "✅ Created production tag: v${PROD_VERSION}"
 
+      - name: Create Pull Request to main
+        id: create-pr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: release/v${{ needs.validate.outputs.prod_version }}
+          base: main
+          title: "🚀 Release v${{ needs.validate.outputs.prod_version }}"
+          body: |
+            ## 🚀 Production Release v${{ needs.validate.outputs.prod_version }}
+            
+            **Promoted from staging:** `${{ github.event.inputs.staging_version }}`  
+            **Source branch:** `${{ needs.validate.outputs.source_branch }}`
+            
+            ### ✅ Deployment Status
+            - **Production deployed:** ✅ https://api.guitar.lab
+            - **Docker images tagged:** ✅
+              - `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.prod_version }}`
+              - `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest`
+            
+            ### 📋 Next Steps
+            This PR will be **auto-merged** to update the main branch.
+            
+            After merge, `develop` and `hotfix` will be automatically synced.
+          labels: |
+            release
+            automated
+          draft: false
+
+      - name: Auto-approve Pull Request
+        uses: juliangruber/approve-pull-request-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          number: ${{ steps.create-pr.outputs.pull-request-number }}
+
+      - name: Enable auto-merge
+        run: |
+          gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
+            --auto --squash --delete-branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for PR merge
+        run: |
+          PR_NUMBER=${{ steps.create-pr.outputs.pull-request-number }}
+          
+          echo "⏳ Waiting for PR #${PR_NUMBER} to be merged..."
+          
+          for i in {1..30}; do
+            STATE=$(gh pr view $PR_NUMBER --json state --jq .state)
+          
+            if [ "$STATE" == "MERGED" ]; then
+              echo "✅ PR merged successfully!"
+              exit 0
+            fi
+          
+            echo "  Attempt $i/30: PR state is $STATE"
+            sleep 10
+          done
+          
+          echo "⚠️  PR not merged after 5 minutes, check manually"
+          exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sync-branches:
+    needs: [validate, create-release-pr]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
       - name: Sync develop with main
         run: |
           PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
           
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
           git fetch origin develop
           git checkout develop
-          git merge origin/main -m "chore: sync develop with production v${PROD_VERSION}"
+          git merge origin/main --no-edit
           git push origin develop
           
           echo "✅ Synced develop with main"
@@ -211,10 +268,20 @@ jobs:
           
           git fetch origin hotfix
           git checkout hotfix
-          git merge origin/main -m "chore: sync hotfix with production v${PROD_VERSION}"
+          git merge origin/main --no-edit
           git push origin hotfix
           
           echo "✅ Synced hotfix with main"
+
+  create-github-release:
+    needs: [validate, sync-branches]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Create GitHub Release
         uses: actions/create-release@v1
@@ -238,8 +305,3 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.prod_version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ```
-  
-            ### 📝 Changelog
-            See commits between tags for detailed changes.
-          draft: false
-          prerelease: false
