@@ -30,13 +30,11 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.staging_version }}"
           
-          # Validate format X.Y.Z-rcN
           if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$ ]]; then
             echo "❌ Error: Invalid version format. Must be X.Y.Z-rcN"
             exit 1
           fi
           
-          # Extract production version (remove -rc suffix)
           PROD_VERSION=${VERSION%-rc*}
           echo "prod_version=$PROD_VERSION" >> $GITHUB_OUTPUT
           echo "staging_version=$VERSION" >> $GITHUB_OUTPUT
@@ -59,10 +57,8 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.staging_version }}"
           
-          # Login to GHCR
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
           
-          # Try to pull image
           if ! docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}; then
             echo "❌ Error: Docker image ${VERSION} does not exist in registry"
             exit 1
@@ -75,10 +71,8 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.staging_version }}"
           
-          # Find commit associated with tag
           TAG_COMMIT=$(git rev-list -n 1 "v${VERSION}")
           
-          # Check if it's from hotfix or develop
           if git branch -r --contains $TAG_COMMIT | grep -q "origin/hotfix"; then
             SOURCE_BRANCH="hotfix"
           else
@@ -101,17 +95,12 @@ jobs:
           PROD_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PROD_VERSION}
           LATEST_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           
-          # Login
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
           
-          # Pull staging image
           docker pull $STAGING_IMAGE
-          
-          # Retag for production
           docker tag $STAGING_IMAGE $PROD_IMAGE
           docker tag $STAGING_IMAGE $LATEST_IMAGE
           
-          # Push production tags
           docker push $PROD_IMAGE
           docker push $LATEST_IMAGE
           
@@ -193,25 +182,25 @@ jobs:
               - `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.prod_version }}`
               - `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest`
             
-            ### 📋 Next Steps
-            This PR will be **auto-merged** to update the main branch.
+            ### 🤖 Auto-Merge
+            This PR will be automatically merged using **merge commit** to update main branch.
             
-            After merge, `develop` and `hotfix` will be automatically synced.
+            ---
+            *This is an automated release PR created by the promote-to-production workflow.*
           labels: |
             release
             automated
           draft: false
 
-      - name: Auto-approve Pull Request
-        uses: juliangruber/approve-pull-request-action@v2
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          number: ${{ steps.create-pr.outputs.pull-request-number }}
-
-      - name: Enable auto-merge
+      - name: Enable auto-merge with merge commit
         run: |
-          gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
-            --auto --squash --delete-branch
+          PR_NUMBER=${{ steps.create-pr.outputs.pull-request-number }}
+          
+          echo "Enabling auto-merge for PR #${PR_NUMBER} with merge commit strategy"
+          
+          gh pr merge ${PR_NUMBER} --auto --merge --delete-branch
+          
+          echo "✅ Auto-merge enabled with merge commit"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -220,20 +209,35 @@ jobs:
           PR_NUMBER=${{ steps.create-pr.outputs.pull-request-number }}
           
           echo "⏳ Waiting for PR #${PR_NUMBER} to be merged..."
+          echo "PR URL: https://github.com/${{ github.repository }}/pull/${PR_NUMBER}"
           
-          for i in {1..30}; do
-            STATE=$(gh pr view $PR_NUMBER --json state --jq .state)
+          for i in {1..60}; do
+            sleep 5
+          
+            STATE=$(gh pr view ${PR_NUMBER} --json state --jq .state 2>/dev/null || echo "UNKNOWN")
           
             if [ "$STATE" == "MERGED" ]; then
-              echo "✅ PR merged successfully!"
+              echo ""
+              echo "✅ PR #${PR_NUMBER} merged successfully with merge commit!"
               exit 0
             fi
           
-            echo "  Attempt $i/30: PR state is $STATE"
-            sleep 10
+            if [ "$STATE" == "CLOSED" ]; then
+              echo ""
+              echo "❌ PR was closed without merging!"
+              exit 1
+            fi
+          
+            if [ "$STATE" == "UNKNOWN" ]; then
+              echo "  Check $i/60: Unable to get PR state, retrying..."
+            else
+              echo "  Check $i/60: PR state is $STATE, waiting for merge..."
+            fi
           done
           
-          echo "⚠️  PR not merged after 5 minutes, check manually"
+          echo ""
+          echo "⚠️  PR not merged after 5 minutes"
+          echo "Check manually: https://github.com/${{ github.repository }}/pull/${PR_NUMBER}"
           exit 1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -255,23 +259,25 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           
+          echo "Syncing develop with main..."
           git fetch origin develop
           git checkout develop
-          git merge origin/main --no-edit
+          git merge origin/main --no-edit -m "chore: sync develop with production v${PROD_VERSION}"
           git push origin develop
           
-          echo "✅ Synced develop with main"
+          echo "✅ Synced develop with main (production v${PROD_VERSION})"
 
       - name: Sync hotfix with main
         run: |
           PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
           
+          echo "Syncing hotfix with main..."
           git fetch origin hotfix
           git checkout hotfix
-          git merge origin/main --no-edit
+          git merge origin/main --no-edit -m "chore: sync hotfix with production v${PROD_VERSION}"
           git push origin hotfix
           
-          echo "✅ Synced hotfix with main"
+          echo "✅ Synced hotfix with main (production v${PROD_VERSION})"
 
   create-github-release:
     needs: [validate, sync-branches]
@@ -282,6 +288,19 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
+          STAGING_VERSION="${{ github.event.inputs.staging_version }}"
+          
+          # Get commits between staging tag and production tag
+          COMMITS=$(git log --oneline "v${STAGING_VERSION}^..v${PROD_VERSION}" 2>/dev/null || echo "No commits found")
+          
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: actions/create-release@v1
@@ -297,8 +316,8 @@ jobs:
             **Source branch:** `${{ needs.validate.outputs.source_branch }}`
             
             ### 🌐 Deployment
-            - **Production URL:** https://api.guitar.lab
-            - **Staging URL:** https://api-staging.guitar.lab
+            - **Production:** https://api.guitar.lab
+            - **Staging:** https://api-staging.guitar.lab
             
             ### 📦 Docker Images
             ```
