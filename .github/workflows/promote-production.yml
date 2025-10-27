@@ -211,10 +211,28 @@ jobs:
         run: |
           echo "⏳ Enabling auto-merge for PR #${PR_NUMBER}..."
           
-          gh pr merge ${PR_NUMBER} --auto --merge --delete-branch
+          # Try merge commit first, fallback to squash if not allowed
+          if gh pr merge ${PR_NUMBER} --auto --merge --delete-branch 2>/dev/null; then
+            echo "✅ Auto-merge enabled with merge commit strategy"
+          elif gh pr merge ${PR_NUMBER} --auto --squash --delete-branch 2>/dev/null; then
+            echo "✅ Auto-merge enabled with squash strategy"
+          elif gh pr merge ${PR_NUMBER} --auto --rebase --delete-branch 2>/dev/null; then
+            echo "✅ Auto-merge enabled with rebase strategy"
+          else
+            echo "❌ Failed to enable auto-merge. Trying without delete-branch..."
+            if gh pr merge ${PR_NUMBER} --auto --merge; then
+              echo "✅ Auto-merge enabled (branch will not be auto-deleted)"
+            elif gh pr merge ${PR_NUMBER} --auto --squash; then
+              echo "✅ Auto-merge enabled with squash (branch will not be auto-deleted)"
+            else
+              echo "❌ Could not enable auto-merge. Please check repository settings:"
+              echo "   - Settings → Pull Requests → Allow auto-merge"
+              echo "   - Settings → Pull Requests → Allow merge commits (or squash/rebase)"
+              exit 1
+            fi
+          fi
           
-          echo "✅ Auto-merge enabled with merge commit strategy"
-          echo "✅ Release branch will be deleted after merge"
+          echo "✅ Release branch will be deleted after merge (if supported)"
 
       - name: Wait for PR merge
         env:
