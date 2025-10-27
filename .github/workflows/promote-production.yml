@@ -18,11 +18,11 @@ jobs:
     outputs:
       prod_version: ${{ steps.version.outputs.prod_version }}
       source_branch: ${{ steps.branch.outputs.source_branch }}
+      tag_commit: ${{ steps.branch.outputs.tag_commit }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
 
       - name: Validate version format
@@ -37,7 +37,6 @@ jobs:
           
           PROD_VERSION=${VERSION%-rc*}
           echo "prod_version=$PROD_VERSION" >> $GITHUB_OUTPUT
-          echo "staging_version=$VERSION" >> $GITHUB_OUTPUT
           
           echo "✅ Staging version: $VERSION"
           echo "✅ Production version: $PROD_VERSION"
@@ -72,6 +71,7 @@ jobs:
           VERSION="${{ github.event.inputs.staging_version }}"
           
           TAG_COMMIT=$(git rev-list -n 1 "v${VERSION}")
+          echo "tag_commit=$TAG_COMMIT" >> $GITHUB_OUTPUT
           
           if git branch -r --contains $TAG_COMMIT | grep -q "origin/hotfix"; then
             SOURCE_BRANCH="hotfix"
@@ -81,6 +81,7 @@ jobs:
           
           echo "source_branch=$SOURCE_BRANCH" >> $GITHUB_OUTPUT
           echo "✅ Source branch: $SOURCE_BRANCH"
+          echo "✅ Tag commit: $TAG_COMMIT"
 
   deploy-production:
     needs: validate
@@ -132,82 +133,93 @@ jobs:
     needs: [validate, deploy-production]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source branch
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.validate.outputs.source_branch }}
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create production tag on source branch
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Create release branch from tagged commit
+        run: |
+          PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
+          TAG_COMMIT="${{ needs.validate.outputs.tag_commit }}"
+          RELEASE_BRANCH="release/v${PROD_VERSION}"
+          
+          echo "Creating release branch from commit ${TAG_COMMIT}"
+          
+          # Create and checkout release branch from the specific tagged commit
+          git checkout -b $RELEASE_BRANCH $TAG_COMMIT
+          
+          # Push release branch
+          git push origin $RELEASE_BRANCH
+          
+          echo "✅ Created release branch: $RELEASE_BRANCH from commit ${TAG_COMMIT}"
+
+      - name: Create Pull Request from release branch to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
           STAGING_VERSION="${{ github.event.inputs.staging_version }}"
           SOURCE_BRANCH="${{ needs.validate.outputs.source_branch }}"
+          RELEASE_BRANCH="release/v${PROD_VERSION}"
+          TAG_COMMIT="${{ needs.validate.outputs.tag_commit }}"
           
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          # Create PR from release branch to main
+          PR_URL=$(gh pr create \
+            --base main \
+            --head $RELEASE_BRANCH \
+            --title "🚀 Release v${PROD_VERSION}" \
+            --body "## 🚀 Production Release v${PROD_VERSION}
           
-          git tag -a "v${PROD_VERSION}" -m "Production Release v${PROD_VERSION}
+          **Promoted from staging:** \`${STAGING_VERSION}\`  
+          **Source branch:** \`${SOURCE_BRANCH}\`  
+          **Tagged commit:** \`${TAG_COMMIT}\`
+          
+          ### ✅ Deployment Status
+          - **Production deployed:** ✅ https://api.guitar.lab
+          - **Docker images tagged:** ✅
+            - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PROD_VERSION}\`
+            - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`
+          
+          ### 📦 Release Scope
+          This PR contains **only** the code up to tag \`v${STAGING_VERSION}\`.  
+          Any commits after this tag on ${SOURCE_BRANCH} are **not included**.
+          
+          ### 🤖 Auto-Merge
+          This PR will be automatically merged and the release branch deleted.
+          
+          ---
+          *This is an automated release PR created by the promote-to-production workflow.*" \
+            --label "release,automated")
+          
+          echo "✅ Created PR: $PR_URL"
+          
+          # Extract PR number from URL
+          PR_NUMBER=$(echo $PR_URL | grep -oP '\d+$')
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+          echo "✅ PR Number: $PR_NUMBER"
 
-          🚀 Promoted from staging: v${STAGING_VERSION}
-          📦 Source branch: ${SOURCE_BRANCH}
-          
-          🌐 Production: https://api.guitar.lab
-          🐳 Docker Images:
-             - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PROD_VERSION}
-             - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          "
-          
-          git push origin "v${PROD_VERSION}"
-          
-          echo "✅ Created production tag: v${PROD_VERSION}"
-
-      - name: Create Pull Request to main
-        id: create-pr
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: release/v${{ needs.validate.outputs.prod_version }}
-          base: main
-          title: "🚀 Release v${{ needs.validate.outputs.prod_version }}"
-          body: |
-            ## 🚀 Production Release v${{ needs.validate.outputs.prod_version }}
-            
-            **Promoted from staging:** `${{ github.event.inputs.staging_version }}`  
-            **Source branch:** `${{ needs.validate.outputs.source_branch }}`
-            
-            ### ✅ Deployment Status
-            - **Production deployed:** ✅ https://api.guitar.lab
-            - **Docker images tagged:** ✅
-              - `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.prod_version }}`
-              - `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest`
-            
-            ### 🤖 Auto-Merge
-            This PR will be automatically merged using **merge commit** to update main branch.
-            
-            ---
-            *This is an automated release PR created by the promote-to-production workflow.*
-          labels: |
-            release
-            automated
-          draft: false
-
-      - name: Enable auto-merge with merge commit
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_NUMBER=${{ steps.create-pr.outputs.pull-request-number }}
-          
-          echo "Enabling auto-merge for PR #${PR_NUMBER} with merge commit strategy"
+          echo "⏳ Enabling auto-merge for PR #${PR_NUMBER}..."
           
           gh pr merge ${PR_NUMBER} --auto --merge --delete-branch
           
-          echo "✅ Auto-merge enabled with merge commit"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "✅ Auto-merge enabled with merge commit strategy"
+          echo "✅ Release branch will be deleted after merge"
 
       - name: Wait for PR merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_NUMBER=${{ steps.create-pr.outputs.pull-request-number }}
-          
           echo "⏳ Waiting for PR #${PR_NUMBER} to be merged..."
           echo "PR URL: https://github.com/${{ github.repository }}/pull/${PR_NUMBER}"
           
@@ -218,7 +230,7 @@ jobs:
           
             if [ "$STATE" == "MERGED" ]; then
               echo ""
-              echo "✅ PR #${PR_NUMBER} merged successfully with merge commit!"
+              echo "✅ PR #${PR_NUMBER} merged successfully!"
               exit 0
             fi
           
@@ -239,10 +251,8 @@ jobs:
           echo "⚠️  PR not merged after 5 minutes"
           echo "Check manually: https://github.com/${{ github.repository }}/pull/${PR_NUMBER}"
           exit 1
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  sync-branches:
+  create-production-tag:
     needs: [validate, create-release-pr]
     runs-on: ubuntu-latest
     steps:
@@ -251,18 +261,60 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Create production tag on main
+        run: |
+          PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
+          STAGING_VERSION="${{ github.event.inputs.staging_version }}"
+          SOURCE_BRANCH="${{ needs.validate.outputs.source_branch }}"
+          
+          # Tag the current HEAD of main (which now includes the merged PR)
+          git tag -a "v${PROD_VERSION}" -m "Production Release v${PROD_VERSION}
+
+          🚀 Promoted from staging: v${STAGING_VERSION}
+          📦 Source branch: ${SOURCE_BRANCH}
+          
+          🌐 Production: https://api.guitar.lab
+          🐳 Docker Images:
+             - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PROD_VERSION}
+             - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          
+          git push origin "v${PROD_VERSION}"
+          
+          echo "✅ Created production tag: v${PROD_VERSION} on main"
+
+  sync-branches:
+    needs: [validate, create-production-tag]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
 
       - name: Sync develop with main
         run: |
           PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
           
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+          echo "📥 Fetching develop branch..."
+          git fetch origin develop:develop
           
-          echo "Syncing develop with main..."
-          git fetch origin develop
+          echo "🔄 Syncing develop with main..."
           git checkout develop
-          git merge origin/main --no-edit -m "chore: sync develop with production v${PROD_VERSION}"
+          git merge origin/main --no-edit -m "Sync develop with production v${PROD_VERSION}"
           git push origin develop
           
           echo "✅ Synced develop with main (production v${PROD_VERSION})"
@@ -271,10 +323,12 @@ jobs:
         run: |
           PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
           
-          echo "Syncing hotfix with main..."
-          git fetch origin hotfix
+          echo "📥 Fetching hotfix branch..."
+          git fetch origin hotfix:hotfix
+          
+          echo "🔄 Syncing hotfix with main..."
           git checkout hotfix
-          git merge origin/main --no-edit -m "chore: sync hotfix with production v${PROD_VERSION}"
+          git merge origin/main --no-edit -m "Sync hotfix with production v${PROD_VERSION}"
           git push origin hotfix
           
           echo "✅ Synced hotfix with main (production v${PROD_VERSION})"
@@ -282,6 +336,8 @@ jobs:
   create-github-release:
     needs: [validate, sync-branches]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -295,20 +351,24 @@ jobs:
           PROD_VERSION="${{ needs.validate.outputs.prod_version }}"
           STAGING_VERSION="${{ github.event.inputs.staging_version }}"
           
-          # Get commits between staging tag and production tag
-          COMMITS=$(git log --oneline "v${STAGING_VERSION}^..v${PROD_VERSION}" 2>/dev/null || echo "No commits found")
+          # Get commits between previous production tag and current
+          PREV_TAG=$(git tag -l "v[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | grep -v "rc" | head -n 2 | tail -n 1)
+          
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..v${PROD_VERSION} 2>/dev/null || echo "No previous release found")
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" v${PROD_VERSION} 2>/dev/null || echo "Initial release")
+          fi
           
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ needs.validate.outputs.prod_version }}
-          release_name: Release v${{ needs.validate.outputs.prod_version }}
+          name: Release v${{ needs.validate.outputs.prod_version }}
           body: |
             ## 🚀 Production Release v${{ needs.validate.outputs.prod_version }}
             
@@ -324,3 +384,10 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.prod_version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ```
+            
+            ### 📝 Changes
+            ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
