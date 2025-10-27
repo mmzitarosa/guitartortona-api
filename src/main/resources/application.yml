@@ -7,12 +7,14 @@ spring:
   jpa:
     hibernate:
       ddl-auto: none
-    show-sql: false
+    show-sql: true
   application:
     name: GuitarTortonaV1
   profiles:
     active: local
-  
+  jackson:
+    default-property-inclusion: non_null
+
   thymeleaf:
     cache: false
     prefix: classpath:/templates/
@@ -32,3 +34,9 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}

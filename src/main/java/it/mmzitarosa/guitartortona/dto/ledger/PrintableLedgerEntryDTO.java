@@ -1,14 +1,19 @@
 package it.mmzitarosa.guitartortona.dto.ledger;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
+
 @Getter @Setter
 public class PrintableLedgerEntryDTO {
-	
-	private String date;
+
+	@JsonFormat(pattern = "dd/MM/yyyy")
+	private LocalDate date;
 	private String invoiceNumber;
-	private String invoiceDate;
+	@JsonFormat(pattern = "dd/MM/yyyy")
+	private LocalDate invoiceDate;
 	private String description;
 	private String reason;
 	private String bankName;

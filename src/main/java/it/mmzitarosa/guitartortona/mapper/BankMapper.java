@@ -1,16 +1,9 @@
 package it.mmzitarosa.guitartortona.mapper;
 
 import it.mmzitarosa.guitartortona.dto.BankDTO;
-import it.mmzitarosa.guitartortona.dto.SupplierDTO;
-import it.mmzitarosa.guitartortona.dto.ledger.CreateLedgerEntryDTO;
-import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryDTO;
 import it.mmzitarosa.guitartortona.entity.BankEntity;
-import it.mmzitarosa.guitartortona.entity.LedgerEntryEntity;
-import it.mmzitarosa.guitartortona.entity.SupplierEntity;
-import org.mapstruct.Mapper;
 import org.springframework.stereotype.Component;
 
-import java.text.ParseException;
 import java.util.List;
 
 @Component public class BankMapper {
@@ -32,5 +25,5 @@ import java.util.List;
 		entity.setName(dto.getName());
 		return entity;
 	}
-	
+
 }
