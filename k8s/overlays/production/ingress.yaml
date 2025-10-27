@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: guitartortona-api
+  annotations:
+    cert-manager.io/cluster-issuer: guitar-ca-issuer
+spec:
+  ingressClassName: public
+  tls:
+    - hosts:
+        - api.guitar.lab
+      secretName: guitar-lab-tls
+  rules:
+    - host: api.guitar.lab
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: guitartortona-api
+                port:
+                  number: 8080
