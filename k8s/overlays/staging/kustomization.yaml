@@ -12,4 +12,4 @@ patches:
 
 images:
   - name: ghcr.io/mmzitarosa/guitartortona-api
-    newTag: staging  # Sarà aggiornato da GitHub Actions
+    newTag: 1.2.0-rc2
