@@ -1,0 +1,295 @@
+name: Build & Deploy to Staging
+
+on:
+  push:
+    branches:
+      - develop
+      - hotfix
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, linux, k8s]
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Analyze commit message
+        id: analyze
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          BRANCH="${{ github.ref_name }}"
+          
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          
+          if [[ "$COMMIT_MSG" =~ ^RELEASE:.* ]]; then
+            echo "type=RELEASE" >> $GITHUB_OUTPUT
+            echo "✅ RELEASE commit detected"
+          elif [[ "$COMMIT_MSG" =~ ^MAJOR:.* ]]; then
+            if [[ "$BRANCH" == "hotfix" ]]; then
+              echo "❌ MAJOR commit not allowed on hotfix branch"
+              exit 1
+            fi
+            echo "type=MAJOR" >> $GITHUB_OUTPUT
+            echo "✅ MAJOR commit detected"
+          else
+            echo "type=OTHER" >> $GITHUB_OUTPUT
+            echo "ℹ️  Regular commit - no deployment"
+          fi
+
+      - name: Exit early if not deployment commit
+        if: steps.analyze.outputs.type == 'OTHER'
+        run: |
+          echo "ℹ️  Skipping deployment for regular commit"
+          exit 0
+
+      - name: Check if branch is behind main
+        run: |
+          git fetch origin main
+          BEHIND=$(git rev-list --count HEAD..origin/main)
+          
+          if [ "$BEHIND" -gt 0 ]; then
+            echo "❌ Branch is $BEHIND commits behind main"
+            echo "Please merge main into your branch first"
+            exit 1
+          fi
+          
+          echo "✅ Branch is up to date with main"
+
+      - name: Get latest production version
+        id: prod_version
+        run: |
+          LATEST_PROD_TAG=$(git tag -l 'v*' | grep -v 'rc' | sort -V | tail -n1 || echo "v0.0.0")
+          PROD_VERSION=${LATEST_PROD_TAG#v}
+          
+          echo "latest_prod_tag=$LATEST_PROD_TAG" >> $GITHUB_OUTPUT
+          echo "prod_version=$PROD_VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Latest production version: $PROD_VERSION"
+
+      - name: Calculate new version
+        id: version
+        run: |
+          BRANCH="${{ steps.analyze.outputs.branch }}"
+          TYPE="${{ steps.analyze.outputs.type }}"
+          PROD_VERSION="${{ steps.prod_version.outputs.prod_version }}"
+          
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$PROD_VERSION"
+          
+          if [[ "$TYPE" == "MAJOR" ]]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            RC=1
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}-rc${RC}"
+          
+            echo "create_branches=true" >> $GITHUB_OUTPUT
+            echo "prev_major=$((MAJOR - 1))" >> $GITHUB_OUTPUT
+          
+          elif [[ "$TYPE" == "RELEASE" ]]; then
+            if [[ "$BRANCH" == "develop" ]]; then
+              NEXT_MINOR=$((MINOR + 1))
+              EXISTING_RC=$(git tag -l "v${MAJOR}.${NEXT_MINOR}.0-rc*" | sort -V | tail -n1)
+          
+              if [ -n "$EXISTING_RC" ]; then
+                RC_NUM=${EXISTING_RC##*-rc}
+                RC=$((RC_NUM + 1))
+                NEW_VERSION="${MAJOR}.${NEXT_MINOR}.0-rc${RC}"
+              else
+                MINOR=$NEXT_MINOR
+                PATCH=0
+                RC=1
+                NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}-rc${RC}"
+              fi
+          
+            elif [[ "$BRANCH" == "hotfix" ]]; then
+              NEXT_PATCH=$((PATCH + 1))
+              EXISTING_RC=$(git tag -l "v${MAJOR}.${MINOR}.${NEXT_PATCH}-rc*" | sort -V | tail -n1)
+          
+              if [ -n "$EXISTING_RC" ]; then
+                RC_NUM=${EXISTING_RC##*-rc}
+                RC=$((RC_NUM + 1))
+                NEW_VERSION="${MAJOR}.${MINOR}.${NEXT_PATCH}-rc${RC}"
+              else
+                PATCH=$NEXT_PATCH
+                RC=1
+                NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}-rc${RC}"
+              fi
+            fi
+          fi
+          
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MINOR" >> $GITHUB_OUTPUT
+          echo "patch=$PATCH" >> $GITHUB_OUTPUT
+          echo "rc=$RC" >> $GITHUB_OUTPUT
+          
+          echo "🏷️  New version: $NEW_VERSION"
+
+      - name: Check if tag already exists
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "❌ Tag $TAG already exists!"
+            echo "This might indicate a versioning issue."
+            exit 1
+          fi
+          
+          echo "✅ Tag $TAG is available"
+
+      - name: Create version branches (if MAJOR)
+        if: steps.analyze.outputs.type == 'MAJOR' && steps.version.outputs.create_branches == 'true'
+        run: |
+          PREV_MAJOR=${{ steps.version.outputs.prev_major }}
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          if git ls-remote --heads origin v${PREV_MAJOR}/main | grep -q v${PREV_MAJOR}/main; then
+            echo "⚠️  Version branches v${PREV_MAJOR}/* already exist, skipping creation"
+          else
+            git fetch origin main
+            git checkout main
+            git checkout -b v${PREV_MAJOR}/main
+            git push origin v${PREV_MAJOR}/main
+          
+            git checkout develop
+            git checkout -b v${PREV_MAJOR}/develop
+            git push origin v${PREV_MAJOR}/develop
+          
+            git checkout hotfix
+            git checkout -b v${PREV_MAJOR}/hotfix
+            git push origin v${PREV_MAJOR}/hotfix
+          
+            echo "✅ Created version branches: v${PREV_MAJOR}/*"
+          fi
+          
+          git checkout ${{ steps.analyze.outputs.branch }}
+
+      - name: Set up Amazon Corretto 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+          cache: maven
+
+      - name: Update Maven version
+        run: |
+          ./mvnw versions:set -DnewVersion=${{ steps.version.outputs.version }}
+          ./mvnw versions:commit
+
+      - name: Build with Maven
+        run: |
+          ./mvnw clean package -DskipTests
+          echo "✅ Maven build completed"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          
+          docker build -t ${IMAGE}:${VERSION} .
+          docker tag ${IMAGE}:${VERSION} ${IMAGE}:staging
+          
+          docker push ${IMAGE}:${VERSION}
+          docker push ${IMAGE}:staging
+          
+          echo "✅ Image pushed: ${IMAGE}:${VERSION}"
+          echo "✅ Image pushed: ${IMAGE}:staging"
+          echo "image_full=${IMAGE}" >> $GITHUB_ENV
+
+      - name: Install kubectl
+        run: |
+          if ! command -v kubectl &> /dev/null; then
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+          fi
+
+      - name: Deploy to Staging
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="${{ env.image_full }}"
+          
+          echo "🚀 Deploying ${IMAGE}:${VERSION} to staging..."
+          
+          kubectl set image deployment/guitartortona-api \
+            guitartortona-api=${IMAGE}:${VERSION} \
+            -n staging
+          
+          kubectl rollout status deployment/guitartortona-api -n staging --timeout=5m
+          
+          echo "✅ Deployment completed to staging"
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n staging -l app=guitartortona-api
+          
+          DEPLOYED_IMAGE=$(kubectl get deployment guitartortona-api -n staging -o jsonpath='{.spec.template.spec.containers[0].image}')
+          echo "📦 Deployed image: $DEPLOYED_IMAGE"
+
+      - name: Create Git tag
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          BRANCH="${{ steps.analyze.outputs.branch }}"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git tag -a "$TAG" -m "Release $VERSION to staging from $BRANCH"
+          git push origin "$TAG"
+          
+          echo "✅ Tag created: $TAG"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [[ "${{ steps.analyze.outputs.type }}" == "OTHER" ]]; then
+            echo "## ℹ️  No Deployment" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Regular commit - no deployment triggered" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## 🎉 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| **Version** | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Tag** | \`${{ steps.version.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Branch** | \`${{ steps.analyze.outputs.branch }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Environment** | Staging |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Image** | \`${{ env.image_full }}:${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          
+            if [[ "${{ steps.analyze.outputs.type }}" == "MAJOR" ]]; then
+              echo "### 🎯 Major Release" >> $GITHUB_STEP_SUMMARY
+              echo "Version branches \`v${{ steps.version.outputs.prev_major }}/*\` created" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          
+            echo "✅ Deployment completed successfully!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
+            echo "Test the application in staging, then promote to production:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Go to [Actions](https://github.com/${{ github.repository }}/actions/workflows/production-promote.yml)" >> $GITHUB_STEP_SUMMARY
+            echo "2. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
+            echo "3. Enter version: \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
