@@ -5,6 +5,8 @@ on:
     branches:
       - develop
       - hotfix
+    paths-ignore:
+      - 'k8s/**'  # IMPORTANTE: evita loop infiniti
 
 env:
   REGISTRY: ghcr.io
@@ -222,35 +224,34 @@ jobs:
           echo "✅ Image pushed: ${IMAGE}:staging"
           echo "image_full=${IMAGE}" >> $GITHUB_ENV
 
-      - name: Install kubectl
-        run: |
-          if ! command -v kubectl &> /dev/null; then
-            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-            chmod +x kubectl
-            sudo mv kubectl /usr/local/bin/
-          fi
-
-      - name: Deploy to Staging
+      # 🆕 NUOVO: Update Kustomize invece di kubectl set image
+      - name: Update Kustomize image tag
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          IMAGE="${{ env.image_full }}"
           
-          echo "🚀 Deploying ${IMAGE}:${VERSION} to staging..."
+          cd k8s/overlays/staging
           
-          kubectl set image deployment/guitartortona-api \
-            guitartortona-api=${IMAGE}:${VERSION} \
-            -n staging
+          # Aggiorna il tag in kustomization.yaml
+          sed -i "s/newTag: .*/newTag: ${VERSION}/" kustomization.yaml
           
-          kubectl rollout status deployment/guitartortona-api -n staging --timeout=5m
-          
-          echo "✅ Deployment completed to staging"
+          echo "📝 Updated kustomization.yaml:"
+          cat kustomization.yaml
 
-      - name: Verify deployment
+      # 🆕 NUOVO: Commit e push delle modifiche
+      - name: Commit and push Kustomize changes
         run: |
-          kubectl get pods -n staging -l app=guitartortona-api
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          DEPLOYED_IMAGE=$(kubectl get deployment guitartortona-api -n staging -o jsonpath='{.spec.template.spec.containers[0].image}')
-          echo "📦 Deployed image: $DEPLOYED_IMAGE"
+          git add k8s/overlays/staging/kustomization.yaml
+          
+          if git diff --staged --quiet; then
+            echo "ℹ️  No changes to commit"
+          else
+            git commit -m "chore(staging): update image to ${{ steps.version.outputs.version }} [skip ci]"
+            git push origin ${{ needs.check-deployment.outputs.branch }}
+            echo "✅ Kustomize changes pushed"
+          fi
 
       - name: Create Git tag
         run: |
@@ -265,6 +266,18 @@ jobs:
           git push origin "$TAG"
           
           echo "✅ Tag created: $TAG"
+
+      # 🆕 MODIFICATO: Wait for ArgoCD invece di kubectl rollout
+      - name: Wait for ArgoCD sync
+        run: |
+          echo "⏳ Waiting for ArgoCD to sync staging..."
+          echo "   Application: guitartortona-staging"
+          echo "   Version: ${{ steps.version.outputs.version }}"
+          sleep 45
+          
+          echo "✅ ArgoCD should be syncing now"
+          echo "   Check: https://argocd.guitar.lab"
+          echo "   Verify: https://api-staging.guitar.lab/actuator/health"
 
       - name: Deployment Summary
         run: |
@@ -285,10 +298,17 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           
-          echo "✅ Deployment completed successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Image built and kustomization.yaml updated!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔄 ArgoCD Status" >> $GITHUB_STEP_SUMMARY
+          echo "ArgoCD will automatically deploy within ~30 seconds" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Check deployment:**" >> $GITHUB_STEP_SUMMARY
+          echo "- [ArgoCD UI](https://argocd.guitar.lab)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Staging Health](https://api-staging.guitar.lab/actuator/health)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "Test the application in staging, then promote to production:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Go to [Actions](https://github.com/${{ github.repository }}/actions/workflows/production-promote.yml)" >> $GITHUB_STEP_SUMMARY
+          echo "When staging tests pass, promote to production:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to [Actions](https://github.com/${{ github.repository }}/actions/workflows/promote-production.yml)" >> $GITHUB_STEP_SUMMARY
           echo "2. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
           echo "3. Enter version: \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY

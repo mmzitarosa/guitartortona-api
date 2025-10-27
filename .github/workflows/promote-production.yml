@@ -1,397 +1,397 @@
-name: Promote to Production
-
-on:
-  workflow_dispatch:
-    inputs:
-      staging_version:
-        description: 'Staging version to promote (e.g., 1.2.0-rc2 or v1.2.0-rc2)'
-        required: true
-        type: string
-
-  # Trigger automatico quando si crea una release da un tag RC
-  release:
-    types: [published]
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
-jobs:
-  promote-to-production:
-    runs-on: [self-hosted, linux, k8s]
-    # Skip se la release è già una versione production (senza -rc)
-    if: |
-      github.event_name == 'workflow_dispatch' || 
-      (github.event_name == 'release' && contains(github.event.release.tag_name, '-rc'))
-    permissions:
-      contents: write
-      packages: write
-      pull-requests: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Determine staging version
-        id: input
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Manuale: usa input
-            STAGING_VERSION="${{ github.event.inputs.staging_version }}"
-            echo "source=manual" >> $GITHUB_OUTPUT
-          else
-            # Da release: usa tag name
-            STAGING_VERSION="${{ github.event.release.tag_name }}"
-            echo "source=release" >> $GITHUB_OUTPUT
-          fi
-          
-          STAGING_VERSION=${STAGING_VERSION#v}
-          echo "staging_version=$STAGING_VERSION" >> $GITHUB_OUTPUT
-          echo "📦 Staging version: $STAGING_VERSION (source: ${{ github.event_name }})"
-
-      - name: Validate staging version
-        id: validate
-        run: |
-          STAGING_VERSION="${{ steps.input.outputs.staging_version }}"
-          
-          if [[ ! "$STAGING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$ ]]; then
-            echo "❌ Invalid version format: $STAGING_VERSION"
-            echo "Expected format: X.Y.Z-rcN (e.g., 1.2.0-rc2)"
-            exit 1
-          fi
-          
-          if ! git rev-parse "v$STAGING_VERSION" >/dev/null 2>&1; then
-            echo "❌ Tag v$STAGING_VERSION does not exist"
-            echo "Available staging tags:"
-            git tag -l 'v*-rc*' | tail -10
-            exit 1
-          fi
-          
-          echo "✅ Version validated: $STAGING_VERSION"
-          echo "staging_version=$STAGING_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Calculate production version
-        id: version
-        run: |
-          STAGING_VERSION="${{ steps.validate.outputs.staging_version }}"
-          PROD_VERSION=${STAGING_VERSION%-rc*}
-          
-          if git rev-parse "v$PROD_VERSION" >/dev/null 2>&1; then
-            echo "❌ Production tag v$PROD_VERSION already exists!"
-            echo "This version has already been released to production."
-            exit 1
-          fi
-          
-          echo "production_version=$PROD_VERSION" >> $GITHUB_OUTPUT
-          echo "production_tag=v$PROD_VERSION" >> $GITHUB_OUTPUT
-          echo "staging_tag=v$STAGING_VERSION" >> $GITHUB_OUTPUT
-          
-          echo "🏷️  Production version: $PROD_VERSION"
-
-      - name: Determine source branch
-        id: source
-        run: |
-          STAGING_TAG="${{ steps.version.outputs.staging_tag }}"
-          
-          BRANCHES=$(git branch -r --contains "$STAGING_TAG" | grep -E 'origin/(develop|hotfix)' || echo "")
-          
-          if [ -z "$BRANCHES" ]; then
-            echo "❌ Cannot determine source branch for tag $STAGING_TAG"
-            echo "Tag might be orphaned or branches were deleted"
-            exit 1
-          fi
-          
-          SOURCE_BRANCH=$(echo "$BRANCHES" | grep 'develop' | head -n1 | sed 's/.*origin\///' || echo "$BRANCHES" | head -n1 | sed 's/.*origin\///')
-          
-          echo "source_branch=$SOURCE_BRANCH" >> $GITHUB_OUTPUT
-          echo "✅ Source branch: $SOURCE_BRANCH"
-          echo "📍 Tag $STAGING_TAG found in: $SOURCE_BRANCH"
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Retag Docker image
-        run: |
-          STAGING_VERSION="${{ steps.validate.outputs.staging_version }}"
-          PROD_VERSION="${{ steps.version.outputs.production_version }}"
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
-          
-          echo "📦 Pulling staging image: ${IMAGE}:${STAGING_VERSION}"
-          
-          if ! docker pull ${IMAGE}:${STAGING_VERSION}; then
-            echo "❌ Failed to pull staging image"
-            echo "Image ${IMAGE}:${STAGING_VERSION} not found in registry"
-            exit 1
-          fi
-          
-          docker tag ${IMAGE}:${STAGING_VERSION} ${IMAGE}:${PROD_VERSION}
-          docker tag ${IMAGE}:${STAGING_VERSION} ${IMAGE}:latest
-          
-          docker push ${IMAGE}:${PROD_VERSION}
-          docker push ${IMAGE}:latest
-          
-          echo "✅ Image retagged: ${IMAGE}:${PROD_VERSION}"
-          echo "✅ Image retagged: ${IMAGE}:latest"
-          echo "image_full=${IMAGE}" >> $GITHUB_ENV
-
-      - name: Install kubectl
-        run: |
-          if ! command -v kubectl &> /dev/null; then
-            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-            chmod +x kubectl
-            sudo mv kubectl /usr/local/bin/
-          fi
-
-      - name: Deploy to Production
-        run: |
-          PROD_VERSION="${{ steps.version.outputs.production_version }}"
-          IMAGE="${{ env.image_full }}"
-          
-          echo "🚀 Deploying ${IMAGE}:${PROD_VERSION} to production..."
-          
-          CURRENT_IMAGE=$(kubectl get deployment guitartortona-api -n default -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "none")
-          echo "📦 Current production image: $CURRENT_IMAGE"
-          
-          kubectl set image deployment/guitartortona-api \
-            guitartortona-api=${IMAGE}:${PROD_VERSION} \
-            -n default
-          
-          if ! kubectl rollout status deployment/guitartortona-api -n default --timeout=5m; then
-            echo "❌ Deployment failed or timed out"
-            echo "Attempting automatic rollback..."
-            kubectl rollout undo deployment/guitartortona-api -n default
-            exit 1
-          fi
-          
-          echo "✅ Deployment completed to production"
-
-      - name: Verify deployment
-        run: |
-          kubectl get pods -n default -l app=guitartortona-api
-          
-          READY_PODS=$(kubectl get pods -n default -l app=guitartortona-api -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -o "True" | wc -l)
-          
-          if [ "$READY_PODS" -eq 0 ]; then
-            echo "❌ No healthy pods found after deployment"
-            exit 1
-          fi
-          
-          echo "✅ $READY_PODS pod(s) healthy in production"
-
-      - name: Create production tag
-        run: |
-          PROD_TAG="${{ steps.version.outputs.production_tag }}"
-          PROD_VERSION="${{ steps.version.outputs.production_version }}"
-          STAGING_TAG="${{ steps.version.outputs.staging_tag }}"
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git checkout "$STAGING_TAG"
-          
-          git tag -a "$PROD_TAG" -m "Release $PROD_VERSION to production
-
-          Promoted from: $STAGING_TAG
-          Deployed to: production namespace
-          Environment: https://api.guitar.lab"
-  
-          git push origin "$PROD_TAG"
-          
-          echo "✅ Production tag created: $PROD_TAG"
-
-      - name: Merge to main
-        run: |
-          SOURCE_BRANCH="${{ steps.source.outputs.source_branch }}"
-          STAGING_TAG="${{ steps.version.outputs.staging_tag }}"
-          PROD_VERSION="${{ steps.version.outputs.production_version }}"
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git fetch origin main
-          git checkout main
-          git pull origin main
-          
-          if git merge "$STAGING_TAG" -m "chore: Release $PROD_VERSION to production from $SOURCE_BRANCH" --no-ff; then
-            echo "✅ Merge successful"
-          else
-            echo "❌ Merge conflict detected"
-            echo "Please resolve conflicts manually and complete the release"
-            git merge --abort
-            exit 1
-          fi
-          
-          git push origin main
-          
-          echo "✅ Merged $STAGING_TAG into main"
-
-      - name: Sync develop with main
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git fetch origin develop
-          git checkout develop
-          git pull origin develop
-          
-          if git merge origin/main -m "chore: Sync develop with main after production release ${{ steps.version.outputs.production_version }}" --no-ff; then
-            git push origin develop
-            echo "✅ Synced develop with main"
-          else
-            echo "⚠️  Merge conflict in develop - manual intervention required"
-            git merge --abort
-          fi
-
-      - name: Sync hotfix with main
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git fetch origin hotfix
-          git checkout hotfix
-          git pull origin hotfix
-          
-          if git merge origin/main -m "chore: Sync hotfix with main after production release ${{ steps.version.outputs.production_version }}" --no-ff; then
-            git push origin hotfix
-            echo "✅ Synced hotfix with main"
-          else
-            echo "⚠️  Merge conflict in hotfix - manual intervention required"
-            git merge --abort
-          fi
-
-      - name: Install GitHub CLI
-        run: |
-          # Check if gh is already installed
-          if ! command -v gh &> /dev/null; then
-            echo "📦 Installing GitHub CLI..."
-          
-            # Download and install gh CLI
-            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-            sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-            sudo apt update
-            sudo apt install gh -y
-          
-            echo "✅ GitHub CLI installed"
-          else
-            echo "✅ GitHub CLI already installed"
-          fi
-          
-          gh --version
-
-      - name: Generate release notes
-        id: release_notes
-        run: |
-          PROD_TAG="${{ steps.version.outputs.production_tag }}"
-          
-          PREVIOUS_TAG=$(git tag -l 'v*' | grep -v 'rc' | sort -V | grep -B1 "$PROD_TAG" | head -n1)
-          
-          if [ -n "$PREVIOUS_TAG" ] && [ "$PREVIOUS_TAG" != "$PROD_TAG" ]; then
-            echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
-          
-            CHANGELOG=$(git log ${PREVIOUS_TAG}..${PROD_TAG} --pretty=format:"- %s (%h)" --no-merges | grep -E '^- (feat|fix|docs|refactor|perf|test|chore):' || echo "- No conventional commits found")
-          
-            echo "$CHANGELOG" > /tmp/changelog.txt
-          
-            echo "✅ Changelog generated from $PREVIOUS_TAG to $PROD_TAG"
-          else
-            echo "- Initial release" > /tmp/changelog.txt
-            echo "previous_tag=none" >> $GITHUB_OUTPUT
-            echo "ℹ️  First production release"
-          fi
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PROD_TAG="${{ steps.version.outputs.production_tag }}"
-          PROD_VERSION="${{ steps.version.outputs.production_version }}"
-          STAGING_VERSION="${{ steps.validate.outputs.staging_version }}"
-          SOURCE_BRANCH="${{ steps.source.outputs.source_branch }}"
-          PREVIOUS_TAG="${{ steps.release_notes.outputs.previous_tag }}"
-          IMAGE="${{ env.image_full }}"
-          
-          CHANGELOG=$(cat /tmp/changelog.txt)
-          
-          cat << EOF > /tmp/release_notes.md
-          ## 🚀 Release $PROD_VERSION
-
-          **Promoted from**: \`$STAGING_VERSION\` (\`${SOURCE_BRANCH}\` branch)
-          **Deployed to**: Production (\`default\` namespace)
-          **Docker Image**: \`${IMAGE}:${PROD_VERSION}\`
-    
-          ### 📋 Changes
-
-          $CHANGELOG
-          
-          ---
-    
-          ### 📦 Docker Images
-            
-          \`\`\`bash
-          docker pull ${IMAGE}:${PROD_VERSION}
-          docker pull ${IMAGE}:latest
-          \`\`\`
-      
-          ### 🔄 Version History
-          
-          EOF
-
-          if [ "$PREVIOUS_TAG" != "none" ]; then
-            echo "- Previous release: [\`$PREVIOUS_TAG\`](https://github.com/${{ github.repository }}/releases/tag/$PREVIOUS_TAG)" >> /tmp/release_notes.md
-          fi
-          
-          echo "- Staging version: [\`v$STAGING_VERSION\`](https://github.com/${{ github.repository }}/releases/tag/v$STAGING_VERSION)" >> /tmp/release_notes.md
-          
-          gh release create "$PROD_TAG" \
-            --title "Release $PROD_VERSION" \
-            --notes-file /tmp/release_notes.md \
-            --latest
-          
-          echo "✅ GitHub Release created: $PROD_TAG"
-
-      - name: Cleanup
-        if: always()
-        run: |
-          rm -f /tmp/changelog.txt /tmp/release_notes.md
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "## 🎉 Production Promotion Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [[ "${{ steps.input.outputs.source }}" == "release" ]]; then
-            echo "**Triggered by**: Creating release from tag" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Staging Version** | \`${{ steps.validate.outputs.staging_version }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Production Version** | \`${{ steps.version.outputs.production_version }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Source Branch** | \`${{ steps.source.outputs.source_branch }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Production Tag** | [\`${{ steps.version.outputs.production_tag }}\`](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.production_tag }}) |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Docker Image** | \`${{ env.image_full }}:${{ steps.version.outputs.production_version }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          echo "### ✅ Completed Actions" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Docker image retagged and pushed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Deployed to production namespace" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Production tag created" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Merged to main branch" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Synced develop and hotfix branches" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ GitHub Release published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🚀 **Version ${{ steps.version.outputs.production_version }} is now live in production!**" >> $GITHUB_STEP_SUMMARY
+#name: Promote to Production
+#
+#on:
+#  workflow_dispatch:
+#    inputs:
+#      staging_version:
+#        description: 'Staging version to promote (e.g., 1.2.0-rc2 or v1.2.0-rc2)'
+#        required: true
+#        type: string
+#
+#  # Trigger automatico quando si crea una release da un tag RC
+#  release:
+#    types: [published]
+#
+#env:
+#  REGISTRY: ghcr.io
+#  IMAGE_NAME: ${{ github.repository }}
+#
+#jobs:
+#  promote-to-production:
+#    runs-on: [self-hosted, linux, k8s]
+#    # Skip se la release è già una versione production (senza -rc)
+#    if: |
+#      github.event_name == 'workflow_dispatch' ||
+#      (github.event_name == 'release' && contains(github.event.release.tag_name, '-rc'))
+#    permissions:
+#      contents: write
+#      packages: write
+#      pull-requests: write
+#
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#        with:
+#          fetch-depth: 0
+#          token: ${{ secrets.GITHUB_TOKEN }}
+#
+#      - name: Determine staging version
+#        id: input
+#        run: |
+#          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+#            # Manuale: usa input
+#            STAGING_VERSION="${{ github.event.inputs.staging_version }}"
+#            echo "source=manual" >> $GITHUB_OUTPUT
+#          else
+#            # Da release: usa tag name
+#            STAGING_VERSION="${{ github.event.release.tag_name }}"
+#            echo "source=release" >> $GITHUB_OUTPUT
+#          fi
+#
+#          STAGING_VERSION=${STAGING_VERSION#v}
+#          echo "staging_version=$STAGING_VERSION" >> $GITHUB_OUTPUT
+#          echo "📦 Staging version: $STAGING_VERSION (source: ${{ github.event_name }})"
+#
+#      - name: Validate staging version
+#        id: validate
+#        run: |
+#          STAGING_VERSION="${{ steps.input.outputs.staging_version }}"
+#
+#          if [[ ! "$STAGING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$ ]]; then
+#            echo "❌ Invalid version format: $STAGING_VERSION"
+#            echo "Expected format: X.Y.Z-rcN (e.g., 1.2.0-rc2)"
+#            exit 1
+#          fi
+#
+#          if ! git rev-parse "v$STAGING_VERSION" >/dev/null 2>&1; then
+#            echo "❌ Tag v$STAGING_VERSION does not exist"
+#            echo "Available staging tags:"
+#            git tag -l 'v*-rc*' | tail -10
+#            exit 1
+#          fi
+#
+#          echo "✅ Version validated: $STAGING_VERSION"
+#          echo "staging_version=$STAGING_VERSION" >> $GITHUB_OUTPUT
+#
+#      - name: Calculate production version
+#        id: version
+#        run: |
+#          STAGING_VERSION="${{ steps.validate.outputs.staging_version }}"
+#          PROD_VERSION=${STAGING_VERSION%-rc*}
+#
+#          if git rev-parse "v$PROD_VERSION" >/dev/null 2>&1; then
+#            echo "❌ Production tag v$PROD_VERSION already exists!"
+#            echo "This version has already been released to production."
+#            exit 1
+#          fi
+#
+#          echo "production_version=$PROD_VERSION" >> $GITHUB_OUTPUT
+#          echo "production_tag=v$PROD_VERSION" >> $GITHUB_OUTPUT
+#          echo "staging_tag=v$STAGING_VERSION" >> $GITHUB_OUTPUT
+#
+#          echo "🏷️  Production version: $PROD_VERSION"
+#
+#      - name: Determine source branch
+#        id: source
+#        run: |
+#          STAGING_TAG="${{ steps.version.outputs.staging_tag }}"
+#
+#          BRANCHES=$(git branch -r --contains "$STAGING_TAG" | grep -E 'origin/(develop|hotfix)' || echo "")
+#
+#          if [ -z "$BRANCHES" ]; then
+#            echo "❌ Cannot determine source branch for tag $STAGING_TAG"
+#            echo "Tag might be orphaned or branches were deleted"
+#            exit 1
+#          fi
+#
+#          SOURCE_BRANCH=$(echo "$BRANCHES" | grep 'develop' | head -n1 | sed 's/.*origin\///' || echo "$BRANCHES" | head -n1 | sed 's/.*origin\///')
+#
+#          echo "source_branch=$SOURCE_BRANCH" >> $GITHUB_OUTPUT
+#          echo "✅ Source branch: $SOURCE_BRANCH"
+#          echo "📍 Tag $STAGING_TAG found in: $SOURCE_BRANCH"
+#
+#      - name: Log in to GitHub Container Registry
+#        uses: docker/login-action@v3
+#        with:
+#          registry: ${{ env.REGISTRY }}
+#          username: ${{ github.actor }}
+#          password: ${{ secrets.GITHUB_TOKEN }}
+#
+#      - name: Retag Docker image
+#        run: |
+#          STAGING_VERSION="${{ steps.validate.outputs.staging_version }}"
+#          PROD_VERSION="${{ steps.version.outputs.production_version }}"
+#          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+#          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+#
+#          echo "📦 Pulling staging image: ${IMAGE}:${STAGING_VERSION}"
+#
+#          if ! docker pull ${IMAGE}:${STAGING_VERSION}; then
+#            echo "❌ Failed to pull staging image"
+#            echo "Image ${IMAGE}:${STAGING_VERSION} not found in registry"
+#            exit 1
+#          fi
+#
+#          docker tag ${IMAGE}:${STAGING_VERSION} ${IMAGE}:${PROD_VERSION}
+#          docker tag ${IMAGE}:${STAGING_VERSION} ${IMAGE}:latest
+#
+#          docker push ${IMAGE}:${PROD_VERSION}
+#          docker push ${IMAGE}:latest
+#
+#          echo "✅ Image retagged: ${IMAGE}:${PROD_VERSION}"
+#          echo "✅ Image retagged: ${IMAGE}:latest"
+#          echo "image_full=${IMAGE}" >> $GITHUB_ENV
+#
+#      - name: Install kubectl
+#        run: |
+#          if ! command -v kubectl &> /dev/null; then
+#            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+#            chmod +x kubectl
+#            sudo mv kubectl /usr/local/bin/
+#          fi
+#
+#      - name: Deploy to Production
+#        run: |
+#          PROD_VERSION="${{ steps.version.outputs.production_version }}"
+#          IMAGE="${{ env.image_full }}"
+#
+#          echo "🚀 Deploying ${IMAGE}:${PROD_VERSION} to production..."
+#
+#          CURRENT_IMAGE=$(kubectl get deployment guitartortona-api -n default -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "none")
+#          echo "📦 Current production image: $CURRENT_IMAGE"
+#
+#          kubectl set image deployment/guitartortona-api \
+#            guitartortona-api=${IMAGE}:${PROD_VERSION} \
+#            -n default
+#
+#          if ! kubectl rollout status deployment/guitartortona-api -n default --timeout=5m; then
+#            echo "❌ Deployment failed or timed out"
+#            echo "Attempting automatic rollback..."
+#            kubectl rollout undo deployment/guitartortona-api -n default
+#            exit 1
+#          fi
+#
+#          echo "✅ Deployment completed to production"
+#
+#      - name: Verify deployment
+#        run: |
+#          kubectl get pods -n default -l app=guitartortona-api
+#
+#          READY_PODS=$(kubectl get pods -n default -l app=guitartortona-api -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -o "True" | wc -l)
+#
+#          if [ "$READY_PODS" -eq 0 ]; then
+#            echo "❌ No healthy pods found after deployment"
+#            exit 1
+#          fi
+#
+#          echo "✅ $READY_PODS pod(s) healthy in production"
+#
+#      - name: Create production tag
+#        run: |
+#          PROD_TAG="${{ steps.version.outputs.production_tag }}"
+#          PROD_VERSION="${{ steps.version.outputs.production_version }}"
+#          STAGING_TAG="${{ steps.version.outputs.staging_tag }}"
+#
+#          git config user.name "github-actions[bot]"
+#          git config user.email "github-actions[bot]@users.noreply.github.com"
+#
+#          git checkout "$STAGING_TAG"
+#
+#          git tag -a "$PROD_TAG" -m "Release $PROD_VERSION to production
+#
+#          Promoted from: $STAGING_TAG
+#          Deployed to: production namespace
+#          Environment: https://api.guitar.lab"
+#
+#          git push origin "$PROD_TAG"
+#
+#          echo "✅ Production tag created: $PROD_TAG"
+#
+#      - name: Merge to main
+#        run: |
+#          SOURCE_BRANCH="${{ steps.source.outputs.source_branch }}"
+#          STAGING_TAG="${{ steps.version.outputs.staging_tag }}"
+#          PROD_VERSION="${{ steps.version.outputs.production_version }}"
+#
+#          git config user.name "github-actions[bot]"
+#          git config user.email "github-actions[bot]@users.noreply.github.com"
+#
+#          git fetch origin main
+#          git checkout main
+#          git pull origin main
+#
+#          if git merge "$STAGING_TAG" -m "chore: Release $PROD_VERSION to production from $SOURCE_BRANCH" --no-ff; then
+#            echo "✅ Merge successful"
+#          else
+#            echo "❌ Merge conflict detected"
+#            echo "Please resolve conflicts manually and complete the release"
+#            git merge --abort
+#            exit 1
+#          fi
+#
+#          git push origin main
+#
+#          echo "✅ Merged $STAGING_TAG into main"
+#
+#      - name: Sync develop with main
+#        continue-on-error: true
+#        run: |
+#          git config user.name "github-actions[bot]"
+#          git config user.email "github-actions[bot]@users.noreply.github.com"
+#
+#          git fetch origin develop
+#          git checkout develop
+#          git pull origin develop
+#
+#          if git merge origin/main -m "chore: Sync develop with main after production release ${{ steps.version.outputs.production_version }}" --no-ff; then
+#            git push origin develop
+#            echo "✅ Synced develop with main"
+#          else
+#            echo "⚠️  Merge conflict in develop - manual intervention required"
+#            git merge --abort
+#          fi
+#
+#      - name: Sync hotfix with main
+#        continue-on-error: true
+#        run: |
+#          git config user.name "github-actions[bot]"
+#          git config user.email "github-actions[bot]@users.noreply.github.com"
+#
+#          git fetch origin hotfix
+#          git checkout hotfix
+#          git pull origin hotfix
+#
+#          if git merge origin/main -m "chore: Sync hotfix with main after production release ${{ steps.version.outputs.production_version }}" --no-ff; then
+#            git push origin hotfix
+#            echo "✅ Synced hotfix with main"
+#          else
+#            echo "⚠️  Merge conflict in hotfix - manual intervention required"
+#            git merge --abort
+#          fi
+#
+#      - name: Install GitHub CLI
+#        run: |
+#          # Check if gh is already installed
+#          if ! command -v gh &> /dev/null; then
+#            echo "📦 Installing GitHub CLI..."
+#
+#            # Download and install gh CLI
+#            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+#            sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+#            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+#            sudo apt update
+#            sudo apt install gh -y
+#
+#            echo "✅ GitHub CLI installed"
+#          else
+#            echo "✅ GitHub CLI already installed"
+#          fi
+#
+#          gh --version
+#
+#      - name: Generate release notes
+#        id: release_notes
+#        run: |
+#          PROD_TAG="${{ steps.version.outputs.production_tag }}"
+#
+#          PREVIOUS_TAG=$(git tag -l 'v*' | grep -v 'rc' | sort -V | grep -B1 "$PROD_TAG" | head -n1)
+#
+#          if [ -n "$PREVIOUS_TAG" ] && [ "$PREVIOUS_TAG" != "$PROD_TAG" ]; then
+#            echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+#
+#            CHANGELOG=$(git log ${PREVIOUS_TAG}..${PROD_TAG} --pretty=format:"- %s (%h)" --no-merges | grep -E '^- (feat|fix|docs|refactor|perf|test|chore):' || echo "- No conventional commits found")
+#
+#            echo "$CHANGELOG" > /tmp/changelog.txt
+#
+#            echo "✅ Changelog generated from $PREVIOUS_TAG to $PROD_TAG"
+#          else
+#            echo "- Initial release" > /tmp/changelog.txt
+#            echo "previous_tag=none" >> $GITHUB_OUTPUT
+#            echo "ℹ️  First production release"
+#          fi
+#
+#      - name: Create GitHub Release
+#        env:
+#          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        run: |
+#          PROD_TAG="${{ steps.version.outputs.production_tag }}"
+#          PROD_VERSION="${{ steps.version.outputs.production_version }}"
+#          STAGING_VERSION="${{ steps.validate.outputs.staging_version }}"
+#          SOURCE_BRANCH="${{ steps.source.outputs.source_branch }}"
+#          PREVIOUS_TAG="${{ steps.release_notes.outputs.previous_tag }}"
+#          IMAGE="${{ env.image_full }}"
+#
+#          CHANGELOG=$(cat /tmp/changelog.txt)
+#
+#          cat << EOF > /tmp/release_notes.md
+#          ## 🚀 Release $PROD_VERSION
+#
+#          **Promoted from**: \`$STAGING_VERSION\` (\`${SOURCE_BRANCH}\` branch)
+#          **Deployed to**: Production (\`default\` namespace)
+#          **Docker Image**: \`${IMAGE}:${PROD_VERSION}\`
+#
+#          ### 📋 Changes
+#
+#          $CHANGELOG
+#
+#          ---
+#
+#          ### 📦 Docker Images
+#
+#          \`\`\`bash
+#          docker pull ${IMAGE}:${PROD_VERSION}
+#          docker pull ${IMAGE}:latest
+#          \`\`\`
+#
+#          ### 🔄 Version History
+#
+#          EOF
+#
+#          if [ "$PREVIOUS_TAG" != "none" ]; then
+#            echo "- Previous release: [\`$PREVIOUS_TAG\`](https://github.com/${{ github.repository }}/releases/tag/$PREVIOUS_TAG)" >> /tmp/release_notes.md
+#          fi
+#
+#          echo "- Staging version: [\`v$STAGING_VERSION\`](https://github.com/${{ github.repository }}/releases/tag/v$STAGING_VERSION)" >> /tmp/release_notes.md
+#
+#          gh release create "$PROD_TAG" \
+#            --title "Release $PROD_VERSION" \
+#            --notes-file /tmp/release_notes.md \
+#            --latest
+#
+#          echo "✅ GitHub Release created: $PROD_TAG"
+#
+#      - name: Cleanup
+#        if: always()
+#        run: |
+#          rm -f /tmp/changelog.txt /tmp/release_notes.md
+#
+#      - name: Summary
+#        if: always()
+#        run: |
+#          echo "## 🎉 Production Promotion Complete" >> $GITHUB_STEP_SUMMARY
+#          echo "" >> $GITHUB_STEP_SUMMARY
+#
+#          if [[ "${{ steps.input.outputs.source }}" == "release" ]]; then
+#            echo "**Triggered by**: Creating release from tag" >> $GITHUB_STEP_SUMMARY
+#            echo "" >> $GITHUB_STEP_SUMMARY
+#          fi
+#
+#          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+#          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+#          echo "| **Staging Version** | \`${{ steps.validate.outputs.staging_version }}\` |" >> $GITHUB_STEP_SUMMARY
+#          echo "| **Production Version** | \`${{ steps.version.outputs.production_version }}\` |" >> $GITHUB_STEP_SUMMARY
+#          echo "| **Source Branch** | \`${{ steps.source.outputs.source_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+#          echo "| **Production Tag** | [\`${{ steps.version.outputs.production_tag }}\`](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.production_tag }}) |" >> $GITHUB_STEP_SUMMARY
+#          echo "| **Docker Image** | \`${{ env.image_full }}:${{ steps.version.outputs.production_version }}\` |" >> $GITHUB_STEP_SUMMARY
+#          echo "" >> $GITHUB_STEP_SUMMARY
+#
+#          echo "### ✅ Completed Actions" >> $GITHUB_STEP_SUMMARY
+#          echo "" >> $GITHUB_STEP_SUMMARY
+#          echo "- ✅ Docker image retagged and pushed" >> $GITHUB_STEP_SUMMARY
+#          echo "- ✅ Deployed to production namespace" >> $GITHUB_STEP_SUMMARY
+#          echo "- ✅ Production tag created" >> $GITHUB_STEP_SUMMARY
+#          echo "- ✅ Merged to main branch" >> $GITHUB_STEP_SUMMARY
+#          echo "- ✅ Synced develop and hotfix branches" >> $GITHUB_STEP_SUMMARY
+#          echo "- ✅ GitHub Release published" >> $GITHUB_STEP_SUMMARY
+#          echo "" >> $GITHUB_STEP_SUMMARY
+#          echo "🚀 **Version ${{ steps.version.outputs.production_version }} is now live in production!**" >> $GITHUB_STEP_SUMMARY
