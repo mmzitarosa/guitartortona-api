@@ -11,18 +11,13 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-deploy:
+  check-deployment:
     runs-on: [self-hosted, linux, k8s]
-    permissions:
-      contents: write
-      packages: write
-
+    outputs:
+      should_deploy: ${{ steps.analyze.outputs.should_deploy }}
+      type: ${{ steps.analyze.outputs.type }}
+      branch: ${{ steps.analyze.outputs.branch }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Analyze commit message
         id: analyze
         run: |
@@ -33,24 +28,40 @@ jobs:
           
           if [[ "$COMMIT_MSG" =~ ^RELEASE:.* ]]; then
             echo "type=RELEASE" >> $GITHUB_OUTPUT
-            echo "✅ RELEASE commit detected"
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ RELEASE commit detected - triggering deployment"
           elif [[ "$COMMIT_MSG" =~ ^MAJOR:.* ]]; then
             if [[ "$BRANCH" == "hotfix" ]]; then
               echo "❌ MAJOR commit not allowed on hotfix branch"
               exit 1
             fi
             echo "type=MAJOR" >> $GITHUB_OUTPUT
-            echo "✅ MAJOR commit detected"
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ MAJOR commit detected - triggering deployment"
           else
             echo "type=OTHER" >> $GITHUB_OUTPUT
-            echo "ℹ️  Regular commit - no deployment"
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo ""
+            echo "ℹ️  Regular commit - no deployment triggered"
+            echo ""
+            echo "💡 To trigger deployment, use:"
+            echo "   git commit -m 'RELEASE: Your description'"
+            echo "   git commit -m 'MAJOR: Your description' (only on develop)"
           fi
 
-      - name: Exit early if not deployment commit
-        if: steps.analyze.outputs.type == 'OTHER'
-        run: |
-          echo "ℹ️  Skipping deployment for regular commit"
-          exit 0
+  build-and-deploy:
+    needs: check-deployment
+    if: needs.check-deployment.outputs.should_deploy == 'true'
+    runs-on: [self-hosted, linux, k8s]
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Check if branch is behind main
         run: |
@@ -78,8 +89,8 @@ jobs:
       - name: Calculate new version
         id: version
         run: |
-          BRANCH="${{ steps.analyze.outputs.branch }}"
-          TYPE="${{ steps.analyze.outputs.type }}"
+          BRANCH="${{ needs.check-deployment.outputs.branch }}"
+          TYPE="${{ needs.check-deployment.outputs.type }}"
           PROD_VERSION="${{ steps.prod_version.outputs.prod_version }}"
           
           IFS='.' read -r MAJOR MINOR PATCH <<< "$PROD_VERSION"
@@ -128,10 +139,6 @@ jobs:
           
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "major=$MAJOR" >> $GITHUB_OUTPUT
-          echo "minor=$MINOR" >> $GITHUB_OUTPUT
-          echo "patch=$PATCH" >> $GITHUB_OUTPUT
-          echo "rc=$RC" >> $GITHUB_OUTPUT
           
           echo "🏷️  New version: $NEW_VERSION"
 
@@ -141,14 +148,13 @@ jobs:
           
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "❌ Tag $TAG already exists!"
-            echo "This might indicate a versioning issue."
             exit 1
           fi
           
           echo "✅ Tag $TAG is available"
 
       - name: Create version branches (if MAJOR)
-        if: steps.analyze.outputs.type == 'MAJOR' && steps.version.outputs.create_branches == 'true'
+        if: needs.check-deployment.outputs.type == 'MAJOR' && steps.version.outputs.create_branches == 'true'
         run: |
           PREV_MAJOR=${{ steps.version.outputs.prev_major }}
           
@@ -156,7 +162,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           if git ls-remote --heads origin v${PREV_MAJOR}/main | grep -q v${PREV_MAJOR}/main; then
-            echo "⚠️  Version branches v${PREV_MAJOR}/* already exist, skipping creation"
+            echo "⚠️  Version branches v${PREV_MAJOR}/* already exist"
           else
             git fetch origin main
             git checkout main
@@ -174,7 +180,7 @@ jobs:
             echo "✅ Created version branches: v${PREV_MAJOR}/*"
           fi
           
-          git checkout ${{ steps.analyze.outputs.branch }}
+          git checkout ${{ needs.check-deployment.outputs.branch }}
 
       - name: Set up Amazon Corretto 21
         uses: actions/setup-java@v4
@@ -250,7 +256,7 @@ jobs:
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
-          BRANCH="${{ steps.analyze.outputs.branch }}"
+          BRANCH="${{ needs.check-deployment.outputs.branch }}"
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -260,36 +266,29 @@ jobs:
           
           echo "✅ Tag created: $TAG"
 
-      - name: Summary
-        if: always()
+      - name: Deployment Summary
         run: |
-          if [[ "${{ steps.analyze.outputs.type }}" == "OTHER" ]]; then
-            echo "## ℹ️  No Deployment" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Regular commit - no deployment triggered" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "## 🎉 Deployment Summary" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-            echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-            echo "| **Version** | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Tag** | \`${{ steps.version.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Branch** | \`${{ steps.analyze.outputs.branch }}\` |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Environment** | Staging |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Image** | \`${{ env.image_full }}:${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🎉 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Tag** | \`${{ steps.version.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`${{ needs.check-deployment.outputs.branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | Staging |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`${{ env.image_full }}:${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           
-            if [[ "${{ steps.analyze.outputs.type }}" == "MAJOR" ]]; then
-              echo "### 🎯 Major Release" >> $GITHUB_STEP_SUMMARY
-              echo "Version branches \`v${{ steps.version.outputs.prev_major }}/*\` created" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-            fi
-          
-            echo "✅ Deployment completed successfully!" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.check-deployment.outputs.type }}" == "MAJOR" ]]; then
+            echo "### 🎯 Major Release" >> $GITHUB_STEP_SUMMARY
+            echo "Version branches \`v${{ steps.version.outputs.prev_major }}/*\` created" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
-            echo "Test the application in staging, then promote to production:" >> $GITHUB_STEP_SUMMARY
-            echo "1. Go to [Actions](https://github.com/${{ github.repository }}/actions/workflows/production-promote.yml)" >> $GITHUB_STEP_SUMMARY
-            echo "2. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
-            echo "3. Enter version: \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           fi
+          
+          echo "✅ Deployment completed successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "Test the application in staging, then promote to production:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to [Actions](https://github.com/${{ github.repository }}/actions/workflows/production-promote.yml)" >> $GITHUB_STEP_SUMMARY
+          echo "2. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
+          echo "3. Enter version: \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
