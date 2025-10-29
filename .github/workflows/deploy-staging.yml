@@ -219,7 +219,14 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           IMAGE="${{ env.image_full }}"
           
-          cd deploy-repo/staging
+          cd deploy-repo
+          
+          # Verifica che deployment.yaml esista nella root
+          if [ ! -f "deployment.yaml" ]; then
+            echo "❌ ERROR: deployment.yaml not found in root!"
+            ls -la
+            exit 1
+          fi
           
           # Aggiorna immagine in deployment.yaml
           sed -i "s|image: ${IMAGE}:.*|image: ${IMAGE}:${VERSION}|" deployment.yaml
@@ -234,7 +241,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          git add staging/deployment.yaml
+          git add deployment.yaml
           
           if git diff --staged --quiet; then
             echo "ℹ️  No changes to commit"
