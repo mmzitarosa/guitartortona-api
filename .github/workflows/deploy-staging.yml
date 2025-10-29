@@ -6,7 +6,8 @@ on:
       - develop
       - hotfix
     paths-ignore:
-      - 'k8s/**'  # IMPORTANTE: evita loop infiniti
+      - '*.md'
+      - 'docs/**'
 
 env:
   REGISTRY: ghcr.io
@@ -58,7 +59,6 @@ jobs:
     permissions:
       contents: write
       packages: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -155,35 +155,6 @@ jobs:
           
           echo "✅ Tag $TAG is available"
 
-      - name: Create version branches (if MAJOR)
-        if: needs.check-deployment.outputs.type == 'MAJOR' && steps.version.outputs.create_branches == 'true'
-        run: |
-          PREV_MAJOR=${{ steps.version.outputs.prev_major }}
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          if git ls-remote --heads origin v${PREV_MAJOR}/main | grep -q v${PREV_MAJOR}/main; then
-            echo "⚠️  Version branches v${PREV_MAJOR}/* already exist"
-          else
-            git fetch origin main
-            git checkout main
-            git checkout -b v${PREV_MAJOR}/main
-            git push origin v${PREV_MAJOR}/main
-          
-            git checkout develop
-            git checkout -b v${PREV_MAJOR}/develop
-            git push origin v${PREV_MAJOR}/develop
-          
-            git checkout hotfix
-            git checkout -b v${PREV_MAJOR}/hotfix
-            git push origin v${PREV_MAJOR}/hotfix
-          
-            echo "✅ Created version branches: v${PREV_MAJOR}/*"
-          fi
-          
-          git checkout ${{ needs.check-deployment.outputs.branch }}
-
       - name: Set up Amazon Corretto 21
         uses: actions/setup-java@v4
         with:
@@ -224,35 +195,6 @@ jobs:
           echo "✅ Image pushed: ${IMAGE}:staging"
           echo "image_full=${IMAGE}" >> $GITHUB_ENV
 
-      # 🆕 NUOVO: Update Kustomize invece di kubectl set image
-      - name: Update Kustomize image tag
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          
-          cd k8s/overlays/staging
-          
-          # Aggiorna il tag in kustomization.yaml
-          sed -i "s/newTag: .*/newTag: ${VERSION}/" kustomization.yaml
-          
-          echo "📝 Updated kustomization.yaml:"
-          cat kustomization.yaml
-
-      # 🆕 NUOVO: Commit e push delle modifiche
-      - name: Commit and push Kustomize changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git add k8s/overlays/staging/kustomization.yaml
-          
-          if git diff --staged --quiet; then
-            echo "ℹ️  No changes to commit"
-          else
-            git commit -m "chore(staging): update image to ${{ steps.version.outputs.version }} [skip ci]"
-            git push origin ${{ needs.check-deployment.outputs.branch }}
-            echo "✅ Kustomize changes pushed"
-          fi
-
       - name: Create Git tag
         run: |
           TAG="${{ steps.version.outputs.tag }}"
@@ -267,21 +209,63 @@ jobs:
           
           echo "✅ Tag created: $TAG"
 
-      # 🆕 MODIFICATO: Wait for ArgoCD invece di kubectl rollout
+      - name: Checkout deploy repository
+        uses: actions/checkout@v4
+        with:
+          repository: mmzitarosa/guitartortona-api-deploy
+          ref: staging
+          token: ${{ secrets.DEPLOY_TOKEN }}
+          path: deploy-repo
+
+      - name: Update deployment image
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="${{ env.image_full }}"
+          
+          cd deploy-repo/staging
+          
+          # Aggiorna immagine in deployment.yaml
+          sed -i "s|image: ${IMAGE}:.*|image: ${IMAGE}:${VERSION}|" deployment.yaml
+          
+          echo "📝 Updated deployment.yaml:"
+          grep "image:" deployment.yaml
+
+      - name: Commit and push to deploy repo
+        run: |
+          cd deploy-repo
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add staging/deployment.yaml
+          
+          if git diff --staged --quiet; then
+            echo "ℹ️  No changes to commit"
+          else
+            git commit -m "chore(staging): update image to ${{ steps.version.outputs.version }} [skip ci]"
+            git push origin staging
+            echo "✅ Deployment config updated in guitartortona-api-deploy"
+          fi
+
       - name: Wait for ArgoCD sync
         run: |
-          echo "⏳ Waiting for ArgoCD to sync staging..."
-          echo "   Application: guitartortona-staging"
+          echo ""
+          echo "⏳ Waiting for ArgoCD to detect changes..."
+          echo "   Repository: guitartortona-api-deploy"
+          echo "   Branch: staging"
+          echo "   Application: guitartortona-api-staging"
           echo "   Version: ${{ steps.version.outputs.version }}"
+          echo ""
           sleep 45
-          
           echo "✅ ArgoCD should be syncing now"
-          echo "   Check: https://argocd.guitar.lab"
-          echo "   Verify: https://api-staging.guitar.lab/actuator/health"
+          echo ""
+          echo "🔗 Check status:"
+          echo "   ArgoCD: https://argocd.guitar.lab"
+          echo "   Staging: https://api-staging.guitar.lab/actuator/health"
 
       - name: Deployment Summary
         run: |
-          echo "## 🎉 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🎉 Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
@@ -291,24 +275,17 @@ jobs:
           echo "| **Environment** | Staging |" >> $GITHUB_STEP_SUMMARY
           echo "| **Image** | \`${{ env.image_full }}:${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [[ "${{ needs.check-deployment.outputs.type }}" == "MAJOR" ]]; then
-            echo "### 🎯 Major Release" >> $GITHUB_STEP_SUMMARY
-            echo "Version branches \`v${{ steps.version.outputs.prev_major }}/*\` created" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "✅ Image built and kustomization.yaml updated!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔄 ArgoCD Status" >> $GITHUB_STEP_SUMMARY
-          echo "ArgoCD will automatically deploy within ~30 seconds" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔄 GitOps Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Docker image built and pushed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Deployment config updated in \`guitartortona-api-deploy\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔄 ArgoCD will sync automatically (~30 seconds)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Check deployment:**" >> $GITHUB_STEP_SUMMARY
           echo "- [ArgoCD UI](https://argocd.guitar.lab)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Staging Health](https://api-staging.guitar.lab/actuator/health)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Staging API](https://api-staging.guitar.lab/actuator/health)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "When staging tests pass, promote to production:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Go to [Actions](https://github.com/${{ github.repository }}/actions/workflows/promote-production.yml)" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to [Promote to Production workflow](https://github.com/${{ github.repository }}/actions/workflows/promote-production.yml)" >> $GITHUB_STEP_SUMMARY
           echo "2. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
           echo "3. Enter version: \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
