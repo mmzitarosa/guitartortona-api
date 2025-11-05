@@ -95,9 +95,6 @@ jobs:
   retag-docker:
     name: Re-tag Docker Images
     needs: [validate]
-    if: |
-      always() && 
-      needs.validate.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -247,11 +244,7 @@ jobs:
             
             ### 📋 Artifacts
             - Application JAR (from staging release)
-            
-            ### ⚠️ Deployment Notes
-            ArgoCD is configured with **manual sync** for production.
-            Please go to ArgoCD UI and click **"Sync"** to deploy this version.
-            
+
             ### 📝 Release Notes
             This production release was tested and validated in staging environment before promotion.
           prerelease: false
@@ -260,15 +253,14 @@ jobs:
           generate_release_notes: true
 
   # ============================================================================
-  # JOB 5: Merge Source Branch to Main and Create PRs
+  # JOB 5: Merge Source Branch to Main
   # ============================================================================
-  merge-and-create-prs:
+  merge:
     name: Merge to Main & Create PRs
     needs: [validate, create-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -359,9 +351,9 @@ jobs:
   # ============================================================================
   notify:
     name: Promotion Complete
-    needs: [validate, retag-docker, update-deploy-repo, create-release, merge-and-create-prs]
+    needs: [validate, create-release]
     runs-on: ubuntu-latest
-    if: always()
+    if: success()
     steps:
       - name: Production promotion summary
         run: |

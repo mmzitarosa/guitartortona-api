@@ -88,7 +88,7 @@ jobs:
   # ============================================================================
   update-deploy-repo:
     name: Update Deployment Config
-    needs: [validate, retag-docker]
+    needs: [retag-docker]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout deployment repository
@@ -139,9 +139,9 @@ jobs:
   # ============================================================================
   notify:
     name: Promotion Complete
-    needs: [validate, retag-docker, update-deploy-repo]
+    needs: [update-deploy-repo]
     runs-on: ubuntu-latest
-    if: always()
+    if: success()
     steps:
       - name: Staging promotion summary
         run: |

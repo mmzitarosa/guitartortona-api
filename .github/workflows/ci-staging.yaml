@@ -90,7 +90,6 @@ jobs:
   version:
     name: Calculate Version
     needs: validate
-    if: needs.validate.outputs.should_proceed == 'true'
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.calc.outputs.version }}
@@ -138,6 +137,11 @@ jobs:
           RC_COUNT=$(git tag -l "${NEW_VERSION}-rc*" | wc -l)
           RC_NUM=$((RC_COUNT + 1))
           NEW_TAG="${NEW_VERSION}-rc${RC_NUM}"
+          
+          if [ "${{ needs.validate.outputs.should_proceed }}" == "true" ]; then
+            NEW_TAG="${NEW_TAG}-SNAPSHOT"
+          fi          
+          
           echo "📦 New version: $NEW_TAG"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
@@ -147,7 +151,7 @@ jobs:
   # ============================================================================
   test:
     name: Run Unit Tests
-    needs: [ validate, version ]
+    needs: [ version ]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -179,6 +183,7 @@ jobs:
   build:
     name: Build Application
     needs: [ validate, version, test ]
+    if: needs.validate.outputs.should_proceed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -217,7 +222,7 @@ jobs:
   # ============================================================================
   docker:
     name: Build & Push Docker Image
-    needs: [ validate, version, build ]
+    needs: [ version, build ]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -274,7 +279,7 @@ jobs:
   # ============================================================================
   update-deploy-repo:
     name: Update Deployment Config
-    needs: [ validate, version, build, docker ]
+    needs: [ version, docker ]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout deployment repository
@@ -326,7 +331,7 @@ jobs:
   # ============================================================================
   release:
     name: Create Release
-    needs: [ validate, version, build, docker, update-deploy-repo ]
+    needs: [ validate, version, update-deploy-repo ]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -389,9 +394,9 @@ jobs:
   # ============================================================================
   notify:
     name: Deployment Complete
-    needs: [ validate, version, release, update-deploy-repo ]
+    needs: [ version, release ]
     runs-on: ubuntu-latest
-    if: always()
+    if: success()
     steps:
       - name: Deployment summary
         run: |
