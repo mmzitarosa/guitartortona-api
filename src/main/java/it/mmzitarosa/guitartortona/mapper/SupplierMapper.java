@@ -1,23 +1,23 @@
 package it.mmzitarosa.guitartortona.mapper;
 
 import it.mmzitarosa.guitartortona.dto.SupplierDTO;
-import it.mmzitarosa.guitartortona.dto.incominginvoice.CreateIncomingInvoiceDTO;
-import it.mmzitarosa.guitartortona.dto.incominginvoice.IncomingInvoiceDTO;
-import it.mmzitarosa.guitartortona.entity.IncomingInvoiceEntity;
 import it.mmzitarosa.guitartortona.entity.SupplierEntity;
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
+import org.springframework.stereotype.Component;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
 
-@Mapper(componentModel = "spring") public interface SupplierMapper {
-	
-	SupplierDTO toDTO(SupplierEntity entity);
+@Component public class SupplierMapper {
 
-	SupplierEntity toEntity(SupplierDTO dto);
-	
-	List<SupplierDTO> toDTOList(List<SupplierEntity> entities);
+	/* == PUBLIC METHODS == */
+	public SupplierDTO toDto(SupplierEntity entity) {
+		SupplierDTO dto = new SupplierDTO();
+		dto.setId(entity.getId());
+		dto.setName(entity.getName());
+		return dto;
+	}
+
+	public List<SupplierDTO> toDto(List<SupplierEntity> entities) {
+		return entities.stream().map(this::toDto).toList();
+	}
 
 }

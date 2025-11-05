@@ -89,12 +89,16 @@ Dott. Gianluca Poggio</p>
     <tbody>
 
     <tr th:each="row : ${ledger.ledgerEntries}">
-        <td th:text="${row.date}">06-lug-25</td>
-        <td th:text="${row.invoiceNumber}"></td>
-        <td th:text="${row.invoiceDate}">01/09/2025</td>
-        <td th:text="${row.description}">Pagamento Fornitore</td>
-        <td th:text="${row.reason}" class="center">FATT</td>
-        <td th:text="${row.bank?.name}">INTESA</td>
+        <td th:text="${row.date}">Data</td>
+        <td th:text="${row.invoiceNumber}">NumeroF</td>
+        <td th:text="${row.invoiceDate}">DataF</td>
+        <td>
+            <span th:text="${row.description}">Descrizione</span>
+            <br th:if="${row.notes != null and !#strings.isEmpty(row.notes)}"/>
+            <span th:if="${row.notes != null and !#strings.isEmpty(row.notes)}" th:text="${row.notes}" style="text-decoration: underline;">Note</span>
+        </td>
+        <td th:text="${row.reason}" class="center">Causale</td>
+        <td th:text="${row.bank?.name}">Banca</td>
         <td th:text="${row.paymentType?.name == 'BALANCE' ? 'Saldo' 
                      : row.paymentType?.name == 'DEPOSIT' ? 'Acconto' 
                      : ''}">Acconto

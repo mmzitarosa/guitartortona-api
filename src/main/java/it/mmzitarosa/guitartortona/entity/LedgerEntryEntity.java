@@ -1,39 +1,29 @@
 package it.mmzitarosa.guitartortona.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.ToString;
 
-import java.util.Date;
+import java.time.LocalDate;
 
 import static it.mmzitarosa.guitartortona.utils.Constant.*;
 
 @Entity @Getter @Setter
-@Table(name = "ledger")
-public class LedgerEntryEntity {
+@Table(name = "ledger") @ToString(callSuper = true)
+public class LedgerEntryEntity extends StatusEntity {
 
-	@Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
-	@Temporal(TemporalType.DATE) @Column(nullable = false) private Date date;
-	@Column(length = 50) private String invoiceNumber;
-	@Temporal(TemporalType.DATE) @Column(nullable = false) private Date invoiceDate;
-	@Column(nullable = false) private String description;
-	@Column(length = 100) private String reason;
-	@Enumerated(EnumType.ORDINAL) @Column(length = 2) private PaymentMethod paymentMethod;
+	private LocalDate date;
+	@Column(name = "invoice_number") private String invoiceNumber;
+	@Column(name = "invoice_date") private LocalDate invoiceDate;
+	private String description;
+	private String reason;
+	@Enumerated(EnumType.ORDINAL) @Column(name = "payment_method") private PaymentMethod paymentMethod;
 	@ManyToOne @JoinColumn(name = "bank_id") private BankEntity bank;
-	@Enumerated(EnumType.ORDINAL) @Column(length = 2) private PaymentType paymentType;
-	@Column(length = 5) private String receiptNumber;
-	@Enumerated(EnumType.ORDINAL) @Column(length = 2) private MovementType movementType;
+	@Enumerated(EnumType.ORDINAL) @Column(name = "payment_type") private PaymentType paymentType;
+	@Column(name = "receipt_number") private String receiptNumber;
+	@Enumerated(EnumType.ORDINAL) @Column(name = "movement_type") private MovementType movementType;
 	private Double amount;
-
 	private String notes;
-	@Temporal(TemporalType.DATE) @Column(name = "created_date", nullable = false, updatable = false) private Date createdDate = new Date();
 
-
-	public Date getDate() { return date; }
-	public void setDate(Date date) { this.date = date; }
-
-	public Date getInvoiceDate() { return invoiceDate; }
-	public void setInvoiceDate(Date invoiceDate) { this.invoiceDate = invoiceDate; }
 }

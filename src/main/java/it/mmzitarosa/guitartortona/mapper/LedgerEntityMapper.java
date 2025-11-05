@@ -3,18 +3,13 @@ package it.mmzitarosa.guitartortona.mapper;
 import it.mmzitarosa.guitartortona.dto.ledger.CreateLedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.PrintableLedgerDTO;
-import it.mmzitarosa.guitartortona.dto.ledger.PrintableLedgerEntryDTO;
 import it.mmzitarosa.guitartortona.entity.BankEntity;
 import it.mmzitarosa.guitartortona.entity.LedgerEntryEntity;
-import it.mmzitarosa.guitartortona.utils.Constant;
 import it.mmzitarosa.guitartortona.utils.Constant.MovementType;
 import it.mmzitarosa.guitartortona.utils.Constant.PaymentMethod;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
 
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,21 +17,24 @@ import static it.mmzitarosa.guitartortona.utils.Constant.MovementType.EXPENSE;
 import static it.mmzitarosa.guitartortona.utils.Constant.MovementType.INCOME;
 import static it.mmzitarosa.guitartortona.utils.Constant.PaymentMethod.BANK;
 import static it.mmzitarosa.guitartortona.utils.Constant.PaymentMethod.CASH;
-import static it.mmzitarosa.guitartortona.utils.Constant.PaymentType.DEPOSIT;
 
-@Component
-public class LedgerEntityMapper {
+@Component public class LedgerEntityMapper {
 
-	@Autowired
-	private BankMapper bankMapper;
-	private final SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+	/* == CONSTANTS == */
+	private final BankMapper bankMapper;
 
+	/* == CONSTRUCTOR == */
+	public LedgerEntityMapper(BankMapper bankMapper) {
+		this.bankMapper = bankMapper;
+	}
+
+	/* == PUBLIC METHODS == */
 	public LedgerEntryDTO toDto(LedgerEntryEntity entity) {
 		LedgerEntryDTO dto = new LedgerEntryDTO();
 		dto.setId(entity.getId());
-		dto.setDate(sdf.format(entity.getDate()));
+		dto.setDate(entity.getDate());
 		dto.setInvoiceNumber(entity.getInvoiceNumber());
-		dto.setInvoiceDate(entity.getInvoiceDate() != null ? sdf.format(entity.getInvoiceDate()) : null);
+		dto.setInvoiceDate(entity.getInvoiceDate());
 		dto.setDescription(entity.getDescription());
 		dto.setReason(entity.getReason());
 		dto.setPaymentMethod(entity.getPaymentMethod());
@@ -49,44 +47,12 @@ public class LedgerEntityMapper {
 		return dto;
 	}
 
-	public PrintableLedgerEntryDTO toPrintableDto(LedgerEntryEntity entity) {
-		PrintableLedgerEntryDTO dto = new PrintableLedgerEntryDTO();
-		dto.setDate(sdf.format(entity.getDate()));
-		dto.setInvoiceNumber(entity.getInvoiceNumber());
-		dto.setInvoiceDate(entity.getInvoiceDate() != null ? sdf.format(entity.getInvoiceDate()) : null);
-		dto.setDescription(entity.getDescription());
-		dto.setReason(entity.getReason());
-		dto.setBankName(entity.getBank() != null ? bankMapper.toDto(entity.getBank()).getName() : null);
-		dto.setPaymentType(entity.getPaymentType() != null ? entity.getPaymentType() == DEPOSIT ? "Acconto" : "Saldo" : null);
-		dto.setReceiptNumber(entity.getReceiptNumber());
-		if (entity.getAmount() != null) {
-//			NumberFormat n = NumberFormat.getCurrencyInstance(Locale.ITALY);
-//			String amount = n.format(entity.getAmount());
-			Double amount = entity.getAmount();
-
-			boolean isCash = entity.getPaymentMethod() == CASH;
-			boolean isBank = entity.getPaymentMethod() == BANK;
-			boolean isIncome = entity.getMovementType() == INCOME;
-			boolean isExpense = entity.getMovementType() == EXPENSE;
-
-			if (isCash) {
-				if (isIncome) dto.setIncomeCashAmount(amount);
-				else if (isExpense) dto.setExpenseCashAmount(amount);
-			} else if (isBank) {
-				if (isIncome) dto.setIncomeBankAmount(amount);
-				else if (isExpense) dto.setExpenseBankAmount(amount);
-			}
-
-		}
-		return dto;
+	public List<LedgerEntryDTO> toDto(List<LedgerEntryEntity> entities) {
+		return entities.stream().map(this::toDto).toList();
 	}
 
 	public Page<LedgerEntryDTO> toDto(Page<LedgerEntryEntity> entities) {
 		return entities.map(this::toDto);
-	}
-
-	public List<LedgerEntryDTO> toDto(List<LedgerEntryEntity> entities) {
-		return entities.stream().map(this::toDto).toList();
 	}
 
 	public PrintableLedgerDTO toPrintableDto(List<LedgerEntryEntity> entities) {
@@ -126,47 +92,24 @@ public class LedgerEntityMapper {
 		return dto;
 	}
 
-	public LedgerEntryEntity toEntity(CreateLedgerEntryDTO dto, BankEntity bankEntity) {
-		try {
-			LedgerEntryEntity entity = new LedgerEntryEntity();
-			entity.setDate(sdf.parse(dto.getDate()));
-			entity.setInvoiceNumber(dto.getInvoiceNumber());
-			entity.setInvoiceDate(dto.getInvoiceDate() != null ? sdf.parse(dto.getInvoiceDate()) : null);
-			entity.setDescription(dto.getDescription());
-			entity.setReason(dto.getReason());
-			entity.setPaymentMethod(dto.getPaymentMethod());
-			entity.setBank(bankEntity);
-			entity.setPaymentType(dto.getPaymentType());
-			entity.setReceiptNumber(dto.getReceiptNumber());
-			entity.setMovementType(dto.getMovementType());
-			entity.setAmount(dto.getAmount());
-			entity.setNotes(dto.getNotes());
-			return entity;
-		} catch (ParseException e) {
-			throw new RuntimeException("Invalid date format", e);
-		}
+	public LedgerEntryEntity toEntity(CreateLedgerEntryDTO dto, BankEntity bank) {
+		return toEntity(new LedgerEntryEntity(), dto, bank);
 	}
 
-	public LedgerEntryEntity toEntity(LedgerEntryDTO dto, BankEntity bankEntity) {
-		try {
-			LedgerEntryEntity entity = new LedgerEntryEntity();
-			entity.setId(dto.getId());
-			entity.setDate(sdf.parse(dto.getDate()));
-			entity.setInvoiceNumber(dto.getInvoiceNumber());
-			entity.setInvoiceDate(sdf.parse(dto.getInvoiceDate()));
-			entity.setDescription(dto.getDescription());
-			entity.setReason(dto.getReason());
-			entity.setPaymentMethod(dto.getPaymentMethod());
-			entity.setBank(bankEntity);
-			entity.setPaymentType(dto.getPaymentType());
-			entity.setReceiptNumber(dto.getReceiptNumber());
-			entity.setMovementType(dto.getMovementType());
-			entity.setAmount(dto.getAmount());
-			entity.setNotes(dto.getNotes());
-			return entity;
-		} catch (ParseException e) {
-			throw new RuntimeException("Invalid date format", e);
-		}
+	public LedgerEntryEntity toEntity(LedgerEntryEntity entity, CreateLedgerEntryDTO dto, BankEntity bank) {
+		entity.setDate(dto.getDate());
+		entity.setInvoiceNumber(dto.getInvoiceNumber());
+		entity.setInvoiceDate(dto.getInvoiceDate());
+		entity.setDescription(dto.getDescription());
+		entity.setReason(dto.getReason());
+		entity.setPaymentMethod(dto.getPaymentMethod());
+		entity.setBank(bank);
+		entity.setPaymentType(dto.getPaymentType());
+		entity.setReceiptNumber(dto.getReceiptNumber());
+		entity.setMovementType(dto.getMovementType());
+		entity.setAmount(dto.getAmount());
+		entity.setNotes(dto.getNotes());
+		return entity;
 	}
 
 }

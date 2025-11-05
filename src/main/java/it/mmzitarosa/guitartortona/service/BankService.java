@@ -1,12 +1,9 @@
 package it.mmzitarosa.guitartortona.service;
 
 import it.mmzitarosa.guitartortona.dto.BankDTO;
-import it.mmzitarosa.guitartortona.dto.SupplierDTO;
 import it.mmzitarosa.guitartortona.entity.BankEntity;
 import it.mmzitarosa.guitartortona.mapper.BankMapper;
-import it.mmzitarosa.guitartortona.mapper.SupplierMapper;
 import it.mmzitarosa.guitartortona.repository.BankRepository;
-import it.mmzitarosa.guitartortona.repository.SupplierRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 
@@ -17,29 +14,35 @@ import java.util.stream.Collectors;
 
 @Service public class BankService {
 
-	private final BankRepository bankRepository;
-	private final BankMapper bankMapper;
-	private List<BankEntity> banks;
+	/* == CONSTANTS == */
+	private final BankRepository repository;
+	private final BankMapper mapper;
+
+	/* == SERVICE FIELDS == */
+	private List<BankDTO> banksDTO;
 	private Map<Long, BankEntity> banksMap;
 
-	public BankService(BankRepository bankRepository, BankMapper bankMapper) {
-		this.bankRepository = bankRepository;
-		this.bankMapper = bankMapper;
+	/* == CONSTRUCTOR == */
+	public BankService(BankRepository repository, BankMapper mapper) {
+		this.repository = repository;
+		this.mapper = mapper;
 	}
 
+	/* == POST CONSTRUCTOR == */
+	/*	  Load banks into memory at startup */
 	@PostConstruct protected void loadBanks() {
-		readBanks();
+		List<BankEntity> banks = repository.findAll();
+		banksMap = banks.stream().collect(Collectors.toMap(BankEntity::getId, Function.identity()));
+		banksDTO = mapper.toDto(banks);
 	}
 
+	/* == PUBLIC METHODS == */
 	public List<BankDTO> readBanks() {
-		if (banks == null || banksMap == null) {
-			banks = bankRepository.findAll();
-			banksMap = banks.stream().collect(Collectors.toMap(BankEntity::getId, Function.identity()));
-		}
-		return bankMapper.toDto(banks);
+		return banksDTO;
 	}
 
-	public BankEntity getBank(long id) {
+	/* == PACKAGE METHODS == */
+	BankEntity getBank(long id) {
 		return banksMap.get(id);
 	}
 

@@ -1,25 +1,30 @@
 package it.mmzitarosa.guitartortona.dto.ledger;
 
-import it.mmzitarosa.guitartortona.dto.BankDTO;
-import jakarta.validation.constraints.*;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
+
+import java.time.LocalDate;
 
 import static it.mmzitarosa.guitartortona.utils.Constant.*;
 
 @Getter @Setter public class CreateLedgerEntryDTO {
 	
-	@NotEmpty(message = "Date is mandatory")
-	@Pattern(regexp = "\\d{2}/\\d{2}/\\d{4}", message = "Date must be in format dd/MM/yyyy")
-	private String date;					// Data della fattura, già formatta: "22/09/1996"
+	@NotNull(message = "Date is mandatory")
+	@JsonFormat(pattern = "dd/MM/yyyy")
+	private LocalDate date;					// Data della fattura, già formatta: "22/09/1996"
 	@Size(max = 50, message = "Invoice number must be at most 50 characters")
 	private String invoiceNumber;			// Numero record "A123"
-	@Pattern(regexp = "\\d{2}/\\d{2}/\\d{4}", message = "Invoice date must be in format dd/MM/yyyy")
-	private String invoiceDate;				// Data della fattura, già formatta: "22/09/1996"
+	@JsonFormat(pattern = "dd/MM/yyyy")
+	private LocalDate invoiceDate;				// Data della fattura, già formatta: "22/09/1996"
 	@NotEmpty(message = "Description is mandatory")
 	@Size(max = 255, message = "Description must be at most 255 characters")
 	private String description;
-	@Size(max = 100, message = "Reason must be at most 255 characters")
+	@Size(max = 100, message = "Reason must be at most 100 characters")
 	private String reason;
 	private PaymentMethod paymentMethod;
 	private Long bankId;

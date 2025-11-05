@@ -12,7 +12,9 @@ spring:
     name: GuitarTortonaV1
   profiles:
     active: local
-  
+  jackson:
+    default-property-inclusion: non_null
+
   thymeleaf:
     cache: false
     prefix: classpath:/templates/
