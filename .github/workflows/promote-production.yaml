@@ -176,7 +176,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           git add overlays/production/kustomization.yaml
-          git commit -m "chore: promote production to $PROD_TAG
+          git commit -m "chore: promote production to ${{ needs.validate.outputs.prod_tag }}"
           
           Promoted from RC: ${{ inputs.rc_tag }}
           Source: ${{ github.repository }}
@@ -289,62 +289,6 @@ jobs:
           
           git push origin main
           echo "✅ Merged $SOURCE_BRANCH into main"
-
-      - name: Create Pull Request for develop
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: sync/main-to-develop-${{ github.run_number }}
-          base: develop
-          title: "chore: sync main into develop after production release ${{ needs.validate.outputs.prod_tag }}"
-          body: |
-            ## 🔄 Sync Main → Develop
-            
-            This PR synchronizes `main` branch into `develop` after production release **${{ needs.validate.outputs.prod_tag }}**.
-            
-            ### 📦 Released Version
-            - **Production Tag:** `${{ needs.validate.outputs.prod_tag }}`
-            - **RC Tag:** `${{ inputs.rc_tag }}`
-            - **Source Branch:** `${{ needs.validate.outputs.source_branch }}`
-            
-            ### ⚠️ Action Required
-            Please review and resolve any conflicts, then merge this PR to keep develop in sync with production.
-            
-            ### 🔗 Links
-            - [Production Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.prod_tag }})
-            - [Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          labels: |
-            sync
-            automated-pr
-          reviewers: ${{ github.actor }}
-
-      - name: Create Pull Request for hotfix
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: sync/main-to-hotfix-${{ github.run_number }}
-          base: hotfix
-          title: "chore: sync main into hotfix after production release ${{ needs.validate.outputs.prod_tag }}"
-          body: |
-            ## 🔄 Sync Main → Hotfix
-            
-            This PR synchronizes `main` branch into `hotfix` after production release **${{ needs.validate.outputs.prod_tag }}**.
-            
-            ### 📦 Released Version
-            - **Production Tag:** `${{ needs.validate.outputs.prod_tag }}`
-            - **RC Tag:** `${{ inputs.rc_tag }}`
-            - **Source Branch:** `${{ needs.validate.outputs.source_branch }}`
-            
-            ### ⚠️ Action Required
-            Please review and resolve any conflicts, then merge this PR to keep hotfix in sync with production.
-            
-            ### 🔗 Links
-            - [Production Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.prod_tag }})
-            - [Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          labels: |
-            sync
-            automated-pr
-          reviewers: ${{ github.actor }}
 
   # ============================================================================
   # JOB 6: Notify Completion
