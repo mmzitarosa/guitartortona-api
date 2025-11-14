@@ -62,6 +62,7 @@ import java.util.List;
 		dto.setNumber(entity.getNumber());
 		dto.setAmount(entity.getAmount());
 		dto.setNotes(entity.getNotes());
+		dto.setStatus(entity.getStatus());
 		dto.setDaysLeft(entity.getDaysLeft());
 		return dto;
 	}

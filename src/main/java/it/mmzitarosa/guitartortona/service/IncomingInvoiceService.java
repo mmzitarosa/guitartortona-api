@@ -44,12 +44,8 @@ import java.util.List;
 		return mapper.toProductsDto(getIncomingInvoice(id));
 	}
 
-	public List<IncomingInvoiceDTO> readIncomingInvoices(Status status) {
-		return mapper.toDto(repository.findAllByStatus(status));
-	}
-
-	public Page<IncomingInvoiceDTO> readIncomingInvoices(Pageable pageable) {
-		return mapper.toDto(repository.findAllByStatus(Status.COMPLETED, pageable));
+	public Page<IncomingInvoiceDTO> readIncomingInvoices(Pageable pageable, Status... statuses) {
+		return mapper.toDto(repository.findAllByStatusIn(List.of(statuses), pageable));
 	}
 
 	public IncomingInvoiceDTO updateIncomingInvoice(long id, CreateIncomingInvoiceDTO dto) {

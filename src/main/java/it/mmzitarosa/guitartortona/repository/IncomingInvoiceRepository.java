@@ -6,9 +6,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.List;
+import java.util.Collection;
 
 public interface IncomingInvoiceRepository extends JpaRepository<IncomingInvoiceEntity, Long> {
-	List<IncomingInvoiceEntity> findAllByStatus(Status status);
-	Page<IncomingInvoiceEntity> findAllByStatus(Status status, Pageable pageable);
+	Page<IncomingInvoiceEntity> findAllByStatusIn(Collection<Status> statuses, Pageable pageable);
 }

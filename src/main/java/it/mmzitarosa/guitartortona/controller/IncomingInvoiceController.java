@@ -12,8 +12,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController @RequestMapping("/api/v1")
 public class IncomingInvoiceController {
 
@@ -34,15 +32,11 @@ public class IncomingInvoiceController {
 
 	/* == READ == */
 	@GetMapping("/incomingInvoices") public Page<IncomingInvoiceDTO> readIncomingInvoices(@PageableDefault(sort = {"date", "supplier" /*TODO Verificare se i fornitori sono al contrario*/, "id"}, direction = Sort.Direction.DESC, size = 20) Pageable pageable) {
-		return service.readIncomingInvoices(pageable);
+		return service.readIncomingInvoices(pageable, Status.DRAFT, Status.COMPLETED);
 	}
 
-	@GetMapping("/archive/incomingInvoices") public List<IncomingInvoiceDTO> readArchivedIncomingInvoices() {
-		return service.readIncomingInvoices(Status.ARCHIVED);
-	}
-
-	@GetMapping("/drafts/incomingInvoices") public List<IncomingInvoiceDTO> readDraftedIncomingInvoices() {
-		return service.readIncomingInvoices(Status.DRAFT);
+	@GetMapping("/archive/incomingInvoices") public Page<IncomingInvoiceDTO> readArchivedIncomingInvoices(@PageableDefault(sort = {"date", "supplier" /*TODO Verificare se i fornitori sono al contrario*/, "id"}, direction = Sort.Direction.DESC, size = 20) Pageable pageable) {
+		return service.readIncomingInvoices(pageable, Status.ARCHIVED);
 	}
 
 	@GetMapping("/incomingInvoice/{id}") public IncomingInvoiceProductsDTO readIncomingInvoice(@PathVariable long id) {

@@ -2,6 +2,7 @@ package it.mmzitarosa.guitartortona.dto.purchase.incominginvoice;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import it.mmzitarosa.guitartortona.dto.SupplierDTO;
+import it.mmzitarosa.guitartortona.utils.Constant.Status;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -17,6 +18,7 @@ import java.time.LocalDate;
 	private Double amount;			// Importo totale delle fattura
 	private String notes;			// Eventuali note
 
+	private Status status;
 	private Long daysLeft;			// Se archiviato, restituisce i giorni restanti
 
 }
