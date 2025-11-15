@@ -48,6 +48,11 @@ import java.util.List;
 		return mapper.toDto(repository.findAllByStatusIn(List.of(statuses), pageable));
 	}
 
+	public long countIncomingInvoicesByStatus(Status status) {
+		return repository.countByStatus(status);
+	}
+
+
 	public IncomingInvoiceDTO updateIncomingInvoice(long id, CreateIncomingInvoiceDTO dto) {
 		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
 		// Converto il DTO in oggetto, passo anche il fornitore recuperato da DB o lo creo

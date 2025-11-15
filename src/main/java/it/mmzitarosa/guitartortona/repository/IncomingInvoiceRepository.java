@@ -10,4 +10,5 @@ import java.util.Collection;
 
 public interface IncomingInvoiceRepository extends JpaRepository<IncomingInvoiceEntity, Long> {
 	Page<IncomingInvoiceEntity> findAllByStatusIn(Collection<Status> statuses, Pageable pageable);
+	long countByStatus(Status status);
 }
