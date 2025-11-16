@@ -15,7 +15,7 @@ public class GuitarTortonaWebConfig {
 				registry.addMapping("/**")
 //						.allowedOrigins("http://localhost:5173") // o la porta del tuo Vue
 						.allowedOrigins("*") // o la porta del tuo Vue
-						.allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+						.allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
 						.allowedHeaders("*");
 			}
 		};
