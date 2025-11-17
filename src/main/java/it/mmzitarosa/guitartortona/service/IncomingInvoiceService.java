@@ -40,8 +40,12 @@ import java.util.List;
 		return mapper.toDto(incomingInvoice);
 	}
 
-	public IncomingInvoiceProductsDTO readIncomingInvoice(long id) {
-		return mapper.toProductsDto(getIncomingInvoice(id));
+	public IncomingInvoiceProductsDTO readIncomingInvoice(long id, Status... statuses) {
+		IncomingInvoiceEntity entity = getIncomingInvoice(id);
+		entity.setItems(entity.getItems().stream()
+				.filter(item -> List.of(statuses).contains(item.getStatus()))
+				.toList());
+		return mapper.toProductsDto(entity);
 	}
 
 	public Page<IncomingInvoiceDTO> readIncomingInvoices(Pageable pageable, Status... statuses) {

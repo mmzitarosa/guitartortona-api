@@ -48,7 +48,7 @@ public class IncomingInvoiceController {
 
 	@GetMapping("/incomingInvoice/{id}")
 	public IncomingInvoiceProductsDTO readIncomingInvoice(@PathVariable long id) {
-		return service.readIncomingInvoice(id);
+		return service.readIncomingInvoice(id, Status.DRAFT, Status.COMPLETED);
 	}
 
 	/* == UPDATE **/
@@ -76,9 +76,15 @@ public class IncomingInvoiceController {
 	}
 
 	/* == (UPDATE) UPDATE INCOMING INVOICE PRODUCT == */
-	@PutMapping("/incomingInvoice/product/{id}")
+	@PutMapping("/incomingInvoice/{invoiceId}/product/{id}")
 	public PurchaseItemDTO updateIncomingInvoiceProduct(@PathVariable long id, @Valid @RequestBody UpdateIncomingInvoiceProductDTO request) {
 		return purchaseItemService.updateIncomingInvoiceProduct(id, request);
+	}
+
+	/* == (UPDATE) UPDATE INCOMING INVOICE PRODUCT == */
+	@DeleteMapping("/incomingInvoice/{invoiceId}/product/{id}")
+	public void deleteIncomingInvoiceProduct(@PathVariable long id) {
+		purchaseItemService.deletePurchaseItem(id);
 	}
 
 

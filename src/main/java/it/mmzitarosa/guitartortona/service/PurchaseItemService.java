@@ -80,8 +80,20 @@ import java.util.stream.Collectors;
 		return mapper.toDto(item);
 	}
 
-	public void deletePurchaseItem(long itemId) {
-		repository.deleteById(itemId);
+	public void deletePurchaseItem(long id) {
+		PurchaseItemEntity purchaseItem = getPurchaseItem(id);
+		// Doppio comportamento, si basa su stato precedente
+		// Se già ARCHIVED da cambio di stato precedente, viene eliminato
+		if (purchaseItem.getStatus() == Constant.Status.ARCHIVED) {
+			// Elimino la relazione
+			// Il prodotto rimane così come da ultimo salvataggio, potrebbe essere usato da altre relazioni
+			repository.deleteById(id);
+		} else {
+			// Aggiorno lo stato della relazione
+			purchaseItem.setStatus(Constant.Status.ARCHIVED);
+			// Salvo il tutto su DB
+			repository.save(purchaseItem);
+		}
 	}
 
 	/* == PACKAGE METHODS == */
