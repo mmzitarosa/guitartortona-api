@@ -7,7 +7,8 @@ import it.mmzitarosa.guitartortona.utils.Constant.Status;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
 
-import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 @Service public class PrintService {
 
@@ -20,8 +21,8 @@ import java.text.SimpleDateFormat;
 	}
 	
 	@SneakyThrows public PrintableLedgerDTO readLedgerBetweenDates(String from, String to, String datePattern) {
-		SimpleDateFormat sdf = new SimpleDateFormat(datePattern);
-		return ledgerEntityMapper.toPrintableDto(ledgerRepository.findAllByStatusAndDateBetweenOrderByDateAsc(Status.COMPLETED, sdf.parse(from), sdf.parse(to)));
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern(datePattern);
+		return ledgerEntityMapper.toPrintableDto(ledgerRepository.findAllByStatusAndDateBetweenOrderByDateAsc(Status.COMPLETED, LocalDate.parse(from, formatter), LocalDate.parse(to, formatter)));
 
 	}
 

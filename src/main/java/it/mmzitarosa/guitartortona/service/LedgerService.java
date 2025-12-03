@@ -10,7 +10,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
-import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import static it.mmzitarosa.guitartortona.utils.Constant.Status;
@@ -49,8 +50,8 @@ import static it.mmzitarosa.guitartortona.utils.Constant.Status;
 	}
 
 	@SneakyThrows public Page<LedgerEntryDTO> readLedgerBetweenDates(String from, String to, String datePattern, Pageable pageable) {
-		SimpleDateFormat sdf = new SimpleDateFormat(datePattern);
-		return mapper.toDto(repository.findAllByStatusAndDateBetweenOrderByDateAsc(Status.COMPLETED, sdf.parse(from), sdf.parse(to), pageable));
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern(datePattern);
+		return mapper.toDto(repository.findAllByStatusAndDateBetweenOrderByDateAsc(Status.COMPLETED, LocalDate.parse(from, formatter), LocalDate.parse(to, formatter), pageable));
 	}
 
 	public LedgerEntryDTO readLedgerEntry(long id) {

@@ -7,6 +7,7 @@ import it.mmzitarosa.guitartortona.entity.IncomingInvoiceEntity;
 import it.mmzitarosa.guitartortona.entity.PurchaseItemEntity;
 import it.mmzitarosa.guitartortona.mapper.IncomingInvoiceMapper;
 import it.mmzitarosa.guitartortona.repository.IncomingInvoiceRepository;
+import it.mmzitarosa.guitartortona.specification.IncomingInvoiceSpecification;
 import it.mmzitarosa.guitartortona.utils.Constant.Status;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -38,6 +39,10 @@ import java.util.List;
 		incomingInvoice = repository.save(incomingInvoice);
 		// Converto l'entity della fattura in DTO
 		return mapper.toDto(incomingInvoice);
+	}
+
+	public Page<IncomingInvoiceDTO> readByFilters(Status status, Long supplierId, Pageable pageable) {
+		return mapper.toDto(repository.findAll(IncomingInvoiceSpecification.withFilters(status, supplierId), pageable));
 	}
 
 	public IncomingInvoiceProductsDTO readIncomingInvoice(long id, Status... statuses) {

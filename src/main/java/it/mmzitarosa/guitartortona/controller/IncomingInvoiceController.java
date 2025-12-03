@@ -36,9 +36,9 @@ public class IncomingInvoiceController {
 
 	/* == READ == */
 	@GetMapping("/incomingInvoices")
-	public IncomingInvoicesResponse readIncomingInvoices(@PageableDefault(sort = {"date", "supplier" /*TODO Verificare se i fornitori sono al contrario*/, "id"}, direction = Sort.Direction.DESC, size = 20) Pageable pageable, @RequestParam(required = false) Status status) {
-		Page<IncomingInvoiceDTO> page = service.readIncomingInvoices(pageable, status == null ? new Status[]{Status.DRAFT, Status.COMPLETED} : new Status[]{status});
-		return new IncomingInvoicesResponse(page.getContent(), new PageMetadata(page.getSize(), page.getNumber(), page.getTotalElements(), page.getTotalPages()), service.countIncomingInvoicesByStatus(Status.DRAFT));
+	public IncomingInvoicesResponse readIncomingInvoices(@PageableDefault(sort = {"date", "supplier" /*TODO Verificare se i fornitori sono al contrario*/, "id"}, direction = Sort.Direction.DESC, size = 20) Pageable pageable, @RequestParam(required = false) Status status, @RequestParam(name = "supplier", required = false) Long supplierId) {
+		Page<IncomingInvoiceDTO> incomingInvoices = service.readByFilters(status, supplierId, pageable);
+		return new IncomingInvoicesResponse(incomingInvoices.getContent(), new PageMetadata(incomingInvoices.getSize(), incomingInvoices.getNumber(), incomingInvoices.getTotalElements(), incomingInvoices.getTotalPages()), service.countIncomingInvoicesByStatus(Status.DRAFT));
 	}
 
 	@GetMapping("/archive/incomingInvoices")
