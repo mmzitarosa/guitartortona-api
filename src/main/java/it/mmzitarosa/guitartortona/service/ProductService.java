@@ -2,18 +2,20 @@ package it.mmzitarosa.guitartortona.service;
 
 import it.mmzitarosa.guitartortona.dto.product.CreateProductDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductDTO;
+import it.mmzitarosa.guitartortona.dto.product.ProductLightDTO;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
 import it.mmzitarosa.guitartortona.mapper.ProductMapper;
 import it.mmzitarosa.guitartortona.repository.ProductRepository;
+import it.mmzitarosa.guitartortona.specification.ProductSpecification;
 import it.mmzitarosa.guitartortona.utils.Constant.ProductCondition;
 import it.mmzitarosa.guitartortona.utils.Constant.Status;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-@Service public class ProductService {
+@Service
+public class ProductService {
 
 	/* == CONSTANTS == */
 	private final ProductRepository repository;
@@ -40,16 +42,20 @@ import java.util.List;
 		return mapper.toDto(getProduct(id));
 	}
 
-	public ProductDTO readProductByCode(String code) {
+	public ProductDTO searchProductByCode(String code) {
 		return mapper.toDto(repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(code, code).orElseThrow(() -> new IllegalArgumentException("Product not found")));
 	}
 
-	public List<ProductDTO> readProducts(Status status) {
-		return mapper.toDto(repository.findAllByStatus(status));
+	public List<ProductLightDTO> readProducts(Sort sort) {
+		return mapper.toLightDto(repository.findAll(sort));
 	}
 
-	public Page<ProductDTO> readProducts(Pageable pageable) {
-		return mapper.toDto(repository.findAllByStatus(Status.COMPLETED, pageable));
+	public List<ProductLightDTO> searchProducts(String search, Sort sort) {
+		return mapper.toLightDto(repository.findAll(ProductSpecification.withSearch(search), sort));
+	}
+
+	public List<ProductLightDTO> readProducts(Status status) {
+		return mapper.toLightDto(repository.findAllByStatus(status));
 	}
 
 	public ProductDTO updateProduct(long id, CreateProductDTO dto) {

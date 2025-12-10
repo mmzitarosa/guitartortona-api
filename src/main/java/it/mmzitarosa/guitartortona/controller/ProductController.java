@@ -2,13 +2,12 @@ package it.mmzitarosa.guitartortona.controller;
 
 import it.mmzitarosa.guitartortona.dto.product.CreateProductDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductDTO;
+import it.mmzitarosa.guitartortona.dto.product.ProductLightDTO;
 import it.mmzitarosa.guitartortona.service.ProductService;
-import it.mmzitarosa.guitartortona.utils.Constant;
+import it.mmzitarosa.guitartortona.utils.Constant.Status;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
+import org.springframework.data.web.SortDefault;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -30,16 +29,13 @@ public class ProductController {
 	}
 
 	/* == READ == */
-	@GetMapping("/products") public Page<ProductDTO> readProducts(@PageableDefault(sort = "id", direction = Sort.Direction.DESC, size = 20) Pageable pageable) {
-		return service.readProducts(pageable);
+	@GetMapping("/products") public List<ProductLightDTO> readProducts(@RequestParam(name = "search", required = false) String search, @SortDefault(sort = "id", direction = Sort.Direction.DESC) Sort sort) {
+		if (search != null) return service.searchProducts(search, sort);
+		return service.readProducts(sort);
 	}
 
-	@GetMapping("/archive/products") public List<ProductDTO> readArchivedProducts() {
-		return service.readProducts(Constant.Status.ARCHIVED);
-	}
-
-	@GetMapping("/drafts/products") public List<ProductDTO> readDraftedProducts() {
-		return service.readProducts(Constant.Status.DRAFT);
+	@GetMapping("/archive/products") public List<ProductLightDTO> readArchivedProducts() {
+		return service.readProducts(Status.ARCHIVED);
 	}
 
 	@GetMapping("/product/{id}") public ProductDTO readProduct(@PathVariable long id) {
@@ -47,7 +43,7 @@ public class ProductController {
 	}
 
 	@GetMapping("/product") public ProductDTO readProductByCode(@RequestParam String code) {
-		return service.readProductByCode(code);
+		return service.searchProductByCode(code);
 	}
 
 	/* == UPDATE **/
