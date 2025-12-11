@@ -48,6 +48,10 @@ import java.util.List;
 		return mapper.toDto(repository.findAllByStatus(status));
 	}
 
+	public List<UsedReceiptDTO> readUsedReceipts(boolean archived) {
+		return mapper.toDto(repository.findAllByArchived(archived));
+	}
+
 	public Page<UsedReceiptDTO> readUsedReceipts(Pageable pageable) {
 		return mapper.toDto(repository.findAllByStatus(Status.COMPLETED, pageable));
 	}
@@ -82,7 +86,7 @@ import java.util.List;
 		UsedReceiptEntity usedReceipt = getUsedReceipt(id);
 		// Doppio comportamento, si basa su stato precedente
 		// Se già ARCHIVED da cambio di stato precedente, viene eliminato
-		if (usedReceipt.getStatus() == Status.ARCHIVED) {
+		if (usedReceipt.isArchived()) {
 			// Elimino da ricevuta
 			// L'eliminazione della ricevuta elimina in cascata anche la relazione.
 			// A differenza delle fatture, qui devo eliminare anche il prodotto //TODO
@@ -92,13 +96,13 @@ import java.util.List;
 			}
 		} else {
 			// Aggiorno lo stato della ricevuta
-			usedReceipt.setStatus(Status.ARCHIVED);
+			usedReceipt.setArchived(true);
 			// Per ogni item aggiorno lo stato della relazione
 			for (PurchaseItemEntity item : usedReceipt.getItems()) {
 				// Aggiorno lo stato della relazione
 				// A differenza delle fatture, qui devo aggiornare anche il prodotto
-				item.setStatus(Status.ARCHIVED);
-				item.getProduct().setStatus(Status.ARCHIVED);
+				item.setArchived(true);
+				item.getProduct().setArchived(true);
 			}
 			// Salvo il tutto su DB
 			repository.save(usedReceipt);

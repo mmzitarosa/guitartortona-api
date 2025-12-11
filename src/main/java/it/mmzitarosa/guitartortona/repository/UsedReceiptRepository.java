@@ -10,5 +10,6 @@ import java.util.List;
 
 public interface UsedReceiptRepository extends JpaRepository<UsedReceiptEntity, Long> {
 	List<UsedReceiptEntity> findAllByStatus(Status status);
+	List<UsedReceiptEntity> findAllByArchived(boolean archived);
 	Page<UsedReceiptEntity> findAllByStatus(Status status, Pageable pageable);
 }

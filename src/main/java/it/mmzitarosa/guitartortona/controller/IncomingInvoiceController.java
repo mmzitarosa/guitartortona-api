@@ -43,7 +43,7 @@ public class IncomingInvoiceController {
 
 	@GetMapping("/archive/incomingInvoices")
 	public Page<IncomingInvoiceDTO> readArchivedIncomingInvoices(@PageableDefault(sort = {"date", "supplier" /*TODO Verificare se i fornitori sono al contrario*/, "id"}, direction = Sort.Direction.DESC, size = 20) Pageable pageable) {
-		return service.readIncomingInvoices(pageable, Status.ARCHIVED);
+		return service.readIncomingInvoices(true, pageable);
 	}
 
 	@GetMapping("/incomingInvoice/{id}")

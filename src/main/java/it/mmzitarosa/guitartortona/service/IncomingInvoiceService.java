@@ -53,6 +53,10 @@ import java.util.List;
 		return mapper.toProductsDto(entity);
 	}
 
+	public Page<IncomingInvoiceDTO> readIncomingInvoices(boolean archived, Pageable pageable) {
+		return mapper.toDto(repository.findAllByArchived(archived, pageable));
+	}
+
 	public Page<IncomingInvoiceDTO> readIncomingInvoices(Pageable pageable, Status... statuses) {
 		return mapper.toDto(repository.findAllByStatusIn(List.of(statuses), pageable));
 	}
@@ -91,19 +95,19 @@ import java.util.List;
 		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
 		// Doppio comportamento, si basa su stato precedente
 		// Se già ARCHIVED da cambio di stato precedente, viene eliminato
-		if (incomingInvoice.getStatus() == Status.ARCHIVED) {
+		if (incomingInvoice.isArchived()) {
 			// Elimino da fattura
 			// L'eliminazione della fattura elimina in cascata anche la relazione.
 			// Il prodotto rimane così come da ultimo salvataggio, potrebbe essere usato da altre relazioni
 			repository.deleteById(id);
 		} else {
 			// Aggiorno lo stato della fattura
-			incomingInvoice.setStatus(Status.ARCHIVED);
+			incomingInvoice.setArchived(true);
 			// Per ogni item aggiorno lo stato della relazione
 			for (PurchaseItemEntity item : incomingInvoice.getItems()) {
 				// Aggiorno lo stato della relazione
 				// Il prodotto rimane così come da ultimo salvataggio, potrebbe essere usato da altre relazioni
-				item.setStatus(Status.ARCHIVED);
+				item.setArchived(true);
 			}
 			// Salvo il tutto su DB
 			repository.save(incomingInvoice);

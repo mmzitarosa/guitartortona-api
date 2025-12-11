@@ -41,8 +41,8 @@ import static it.mmzitarosa.guitartortona.utils.Constant.Status;
 		return mapper.toDto(ledgerEntry);
 	}
 
-	public List<LedgerEntryDTO> readLedger(Status status) {
-		return mapper.toDto(repository.findAllByStatus(status));
+	public List<LedgerEntryDTO> readLedger(boolean archived) {
+		return mapper.toDto(repository.findAllByArchived(archived));
 	}
 
 	public Page<LedgerEntryDTO> readLedger(Pageable pageable) {

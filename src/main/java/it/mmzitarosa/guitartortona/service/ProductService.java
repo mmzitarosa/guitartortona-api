@@ -54,8 +54,8 @@ public class ProductService {
 		return mapper.toLightDto(repository.findAll(ProductSpecification.withSearch(search), sort));
 	}
 
-	public List<ProductLightDTO> readProducts(Status status) {
-		return mapper.toLightDto(repository.findAllByStatus(status));
+	public List<ProductLightDTO> readProducts(boolean archived) {
+		return mapper.toLightDto(repository.findAllByArchived(archived));
 	}
 
 	public ProductDTO updateProduct(long id, CreateProductDTO dto) {

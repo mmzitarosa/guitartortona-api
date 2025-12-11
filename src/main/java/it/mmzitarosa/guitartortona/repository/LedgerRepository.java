@@ -14,7 +14,7 @@ public interface LedgerRepository extends JpaRepository<LedgerEntryEntity, Long>
 	List<LedgerEntryEntity> findAllByStatusAndDateBetweenOrderByDateAsc(Status status, LocalDate from, LocalDate to);
 	Page<LedgerEntryEntity> findAllByStatusAndDateBetweenOrderByDateAsc(Status status, LocalDate from, LocalDate to, Pageable pageable);
 
-	List<LedgerEntryEntity> findAllByStatus(Status status);
+	List<LedgerEntryEntity> findAllByArchived(boolean archived);
 	Page<LedgerEntryEntity> findAllByStatus(Status status, Pageable pageable);
 
 

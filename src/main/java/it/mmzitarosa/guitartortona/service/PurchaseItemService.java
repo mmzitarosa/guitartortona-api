@@ -84,13 +84,13 @@ import java.util.stream.Collectors;
 		PurchaseItemEntity purchaseItem = getPurchaseItem(id);
 		// Doppio comportamento, si basa su stato precedente
 		// Se già ARCHIVED da cambio di stato precedente, viene eliminato
-		if (purchaseItem.getStatus() == Constant.Status.ARCHIVED) {
+		if (purchaseItem.isArchived()) {
 			// Elimino la relazione
 			// Il prodotto rimane così come da ultimo salvataggio, potrebbe essere usato da altre relazioni
 			repository.deleteById(id);
 		} else {
 			// Aggiorno lo stato della relazione
-			purchaseItem.setStatus(Constant.Status.ARCHIVED);
+			purchaseItem.setArchived(true);
 			// Salvo il tutto su DB
 			repository.save(purchaseItem);
 		}

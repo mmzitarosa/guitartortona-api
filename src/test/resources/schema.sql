@@ -30,7 +30,10 @@ CREATE TABLE `ledger` (
   `notes` varchar(255) DEFAULT NULL,
   `created_date` datetime NOT NULL,
   `updated_date` datetime NOT NULL,
-  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2,3)),
+  `completed_date` datetime NULL,
+  `archived_date` datetime NULL,
+  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2)),
+  `archived` boolean DEFAULT false,
 
   PRIMARY KEY (`id`),
   KEY (`bank_id`),
@@ -40,7 +43,7 @@ CREATE TABLE `ledger` (
 ALTER TABLE `ledger` MODIFY COLUMN `movement_type` tinyint(4) DEFAULT NULL COMMENT '0=INCOME, 1=EXPENSE';
 ALTER TABLE `ledger` MODIFY COLUMN `payment_method` tinyint(4) DEFAULT NULL COMMENT '0=BANK, 1=CASH';
 ALTER TABLE `ledger` MODIFY COLUMN `payment_type` tinyint(4) DEFAULT NULL COMMENT '0=DEPOSIT, 1=BALANCE';
-ALTER TABLE `ledger` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED, 3=ARCHIVED';
+ALTER TABLE `ledger` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED';
 
 CREATE TABLE `brand` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
@@ -75,7 +78,10 @@ CREATE TABLE `product` (
   `notes` varchar(255) DEFAULT NULL,
   `created_date` datetime NOT NULL,
   `updated_date` datetime NOT NULL,
-  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2,3)),
+  `completed_date` datetime NULL,
+  `archived_date` datetime NULL,
+  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2)),
+  `archived` boolean DEFAULT false,
 
   PRIMARY KEY (`id`),
   UNIQUE KEY (`code`),
@@ -87,7 +93,7 @@ CREATE TABLE `product` (
 );
 
 ALTER TABLE `product` MODIFY COLUMN `condition_id` tinyint(4) NOT NULL COMMENT '0=NEW, 1=USED';
-ALTER TABLE `product` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED, 3=ARCHIVED';
+ALTER TABLE `product` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED';
 
 
 CREATE TABLE `purchase` (
@@ -97,12 +103,15 @@ CREATE TABLE `purchase` (
   `notes` varchar(255) DEFAULT NULL,
   `created_date` datetime NOT NULL,
   `updated_date` datetime NOT NULL,
-  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2,3)),
+  `completed_date` datetime NULL,
+  `archived_date` datetime NULL,
+  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2)),
+  `archived` boolean DEFAULT false,
 
   PRIMARY KEY (`id`)
 );
 
-ALTER TABLE `purchase` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED, 3=ARCHIVED';
+ALTER TABLE `purchase` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED';
 
 CREATE TABLE `incoming_invoice` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
@@ -135,7 +144,10 @@ CREATE TABLE `purchase_item` (
   `quantity` smallint(4) NOT NULL,
   `created_date` datetime NOT NULL,
   `updated_date` datetime NOT NULL,
-  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2,3)),
+  `completed_date` datetime NULL,
+  `archived_date` datetime NULL,
+  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2)),
+  `archived` boolean DEFAULT false,
 
   PRIMARY KEY (`id`),
   UNIQUE KEY (`purchase_id`, `product_id`),
@@ -145,5 +157,5 @@ CREATE TABLE `purchase_item` (
   CONSTRAINT FOREIGN KEY (`product_id`) REFERENCES `product` (`id`)
 );
 
-ALTER TABLE `purchase_item` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED, 3=ARCHIVED';
+ALTER TABLE `purchase_item` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED';
 

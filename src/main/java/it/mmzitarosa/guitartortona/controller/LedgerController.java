@@ -3,7 +3,6 @@ package it.mmzitarosa.guitartortona.controller;
 import it.mmzitarosa.guitartortona.dto.ledger.CreateLedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryDTO;
 import it.mmzitarosa.guitartortona.service.LedgerService;
-import it.mmzitarosa.guitartortona.utils.Constant;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,7 +35,7 @@ public class LedgerController {
 	}
 
 	@GetMapping("/archive/ledger") public List<LedgerEntryDTO> readArchivedLedgerEntries() {
-		return service.readLedger(Constant.Status.ARCHIVED);
+		return service.readLedger(true);
 	}
 
 	@GetMapping("/ledgerEntry/{id}") public LedgerEntryDTO readLedgerEntry(@PathVariable long id) {

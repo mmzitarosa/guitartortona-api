@@ -13,7 +13,7 @@ public class Constant {
 
 	public enum PaymentType {DEPOSIT, BALANCE}
 
-	public enum Status {DRAFT, PENDING, COMPLETED, ARCHIVED}
+	public enum Status {DRAFT, PENDING, COMPLETED}
 
 	@AllArgsConstructor @Getter
 	public enum ProductCondition {NEW(CodeType.NEW_PRODUCT), USED(CodeType.USED_PRODUCT); private final CodeType codeType; }

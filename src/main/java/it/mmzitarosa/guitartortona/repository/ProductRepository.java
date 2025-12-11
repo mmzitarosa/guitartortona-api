@@ -14,7 +14,7 @@ import static it.mmzitarosa.guitartortona.utils.Constant.Status;
 public interface ProductRepository extends JpaRepository<ProductEntity, Long>, JpaSpecificationExecutor<ProductEntity> {
 
 	Optional<ProductEntity> findByCodeIgnoreCaseOrInternalCodeIgnoreCase(String code, String internalCode);
-	List<ProductEntity> findAllByStatus(Status status);
+	List<ProductEntity> findAllByArchived(boolean archived);
 	Page<ProductEntity> findAllByStatus(Status status, Pageable pageable);
 
 }

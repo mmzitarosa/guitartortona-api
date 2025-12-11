@@ -4,7 +4,6 @@ import it.mmzitarosa.guitartortona.dto.product.CreateProductDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductLightDTO;
 import it.mmzitarosa.guitartortona.service.ProductService;
-import it.mmzitarosa.guitartortona.utils.Constant.Status;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.SortDefault;
@@ -35,7 +34,7 @@ public class ProductController {
 	}
 
 	@GetMapping("/archive/products") public List<ProductLightDTO> readArchivedProducts() {
-		return service.readProducts(Status.ARCHIVED);
+		return service.readProducts(true);
 	}
 
 	@GetMapping("/product/{id}") public ProductDTO readProduct(@PathVariable long id) {

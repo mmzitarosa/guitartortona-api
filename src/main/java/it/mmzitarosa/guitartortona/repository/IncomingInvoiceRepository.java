@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import java.util.Collection;
 
 public interface IncomingInvoiceRepository extends JpaRepository<IncomingInvoiceEntity, Long>, JpaSpecificationExecutor<IncomingInvoiceEntity> {
+	Page<IncomingInvoiceEntity> findAllByArchived(boolean archived, Pageable pageable);
 	Page<IncomingInvoiceEntity> findAllByStatusIn(Collection<Status> statuses, Pageable pageable);
 	long countByStatus(Status status);
 }

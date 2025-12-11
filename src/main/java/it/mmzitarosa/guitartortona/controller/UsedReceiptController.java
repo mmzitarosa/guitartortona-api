@@ -4,7 +4,7 @@ import it.mmzitarosa.guitartortona.dto.purchase.PurchaseItemDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.*;
 import it.mmzitarosa.guitartortona.service.PurchaseItemService;
 import it.mmzitarosa.guitartortona.service.UsedReceiptService;
-import it.mmzitarosa.guitartortona.utils.Constant;
+import it.mmzitarosa.guitartortona.utils.Constant.Status;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -39,11 +39,11 @@ public class UsedReceiptController {
 	}
 
 	@GetMapping("/archive/usedReceipts") public List<UsedReceiptDTO> readArchivedUsedReceipts() {
-		return service.readUsedReceipts(Constant.Status.ARCHIVED);
+		return service.readUsedReceipts(true);
 	}
 
 	@GetMapping("/drafts/usedReceipts") public List<UsedReceiptDTO> readDraftedUsedReceipts() {
-		return service.readUsedReceipts(Constant.Status.DRAFT);
+		return service.readUsedReceipts(Status.DRAFT);
 	}
 
 	@GetMapping("/usedReceipt/{id}") public UsedReceiptProductsDTO readUsedReceipt(@PathVariable long id) {
