@@ -6,7 +6,6 @@ import it.mmzitarosa.guitartortona.dto.product.ProductLightDTO;
 import it.mmzitarosa.guitartortona.entity.BrandEntity;
 import it.mmzitarosa.guitartortona.entity.CategoryEntity;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
-import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -42,17 +41,13 @@ import java.util.List;
 	private ProductLightDTO toLightDto(ProductEntity entity) {
 		ProductLightDTO dto = new ProductLightDTO();
 		dto.setId(entity.getId());
-		dto.setCode(entity.getCode());
-		dto.setInternalCode(entity.getInternalCode());
 		dto.setCategoryId(entity.getCategory().getId());
 		dto.setBrandId(entity.getBrand().getId());
 		dto.setDescription(entity.getDescription());
 		dto.setCondition(entity.getCondition());
 		dto.setPrice(entity.getPrice());
-		dto.setReorderPoint(entity.getReorderPoint());
-		dto.setNotes(entity.getNotes());
+		dto.setQuantity(-1); //TODO Quantity
 
-		//TODO Quantity
 		return dto;
 	}
 
@@ -62,10 +57,6 @@ import java.util.List;
 
 	public List<ProductLightDTO> toLightDto(List<ProductEntity> entities) {
 		return entities.stream().map(this::toLightDto).toList();
-	}
-
-	public Page<ProductDTO> toDto(Page<ProductEntity> entities) {
-		return entities.map(this::toDto);
 	}
 
 	public ProductEntity toEntity(CreateProductDTO dto, CategoryEntity category, BrandEntity brand) {

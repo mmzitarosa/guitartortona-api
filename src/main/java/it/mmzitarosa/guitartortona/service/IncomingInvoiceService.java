@@ -2,15 +2,14 @@ package it.mmzitarosa.guitartortona.service;
 
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.CreateIncomingInvoiceDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceDTO;
+import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceLightDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceProductsDTO;
 import it.mmzitarosa.guitartortona.entity.IncomingInvoiceEntity;
 import it.mmzitarosa.guitartortona.entity.PurchaseItemEntity;
 import it.mmzitarosa.guitartortona.mapper.IncomingInvoiceMapper;
 import it.mmzitarosa.guitartortona.repository.IncomingInvoiceRepository;
-import it.mmzitarosa.guitartortona.specification.IncomingInvoiceSpecification;
 import it.mmzitarosa.guitartortona.utils.Constant.Status;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -41,10 +40,6 @@ import java.util.List;
 		return mapper.toDto(incomingInvoice);
 	}
 
-	public Page<IncomingInvoiceDTO> readByFilters(Status status, Long supplierId, Pageable pageable) {
-		return mapper.toDto(repository.findAll(IncomingInvoiceSpecification.withFilters(status, supplierId), pageable));
-	}
-
 	public IncomingInvoiceProductsDTO readIncomingInvoice(long id, Status... statuses) {
 		IncomingInvoiceEntity entity = getIncomingInvoice(id);
 		entity.setItems(entity.getItems().stream()
@@ -53,18 +48,9 @@ import java.util.List;
 		return mapper.toProductsDto(entity);
 	}
 
-	public Page<IncomingInvoiceDTO> readIncomingInvoices(boolean archived, Pageable pageable) {
-		return mapper.toDto(repository.findAllByArchived(archived, pageable));
+	public List<IncomingInvoiceLightDTO> readIncomingInvoices(boolean archived, Sort sort) {
+		return mapper.toLightDto(repository.findAllByArchived(archived, sort));
 	}
-
-	public Page<IncomingInvoiceDTO> readIncomingInvoices(Pageable pageable, Status... statuses) {
-		return mapper.toDto(repository.findAllByStatusIn(List.of(statuses), pageable));
-	}
-
-	public long countIncomingInvoicesByStatus(Status status) {
-		return repository.countByStatus(status);
-	}
-
 
 	public IncomingInvoiceDTO updateIncomingInvoice(long id, CreateIncomingInvoiceDTO dto) {
 		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);

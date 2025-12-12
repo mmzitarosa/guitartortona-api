@@ -46,16 +46,12 @@ public class ProductService {
 		return mapper.toDto(repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(code, code).orElseThrow(() -> new IllegalArgumentException("Product not found")));
 	}
 
-	public List<ProductLightDTO> readProducts(Sort sort) {
-		return mapper.toLightDto(repository.findAll(sort));
+	public List<ProductLightDTO> readProducts(boolean archived, Sort sort) {
+		return mapper.toLightDto(repository.findAllByArchived(archived, sort));
 	}
 
 	public List<ProductLightDTO> searchProducts(String search, Sort sort) {
 		return mapper.toLightDto(repository.findAll(ProductSpecification.withSearch(search), sort));
-	}
-
-	public List<ProductLightDTO> readProducts(boolean archived) {
-		return mapper.toLightDto(repository.findAllByArchived(archived));
 	}
 
 	public ProductDTO updateProduct(long id, CreateProductDTO dto) {

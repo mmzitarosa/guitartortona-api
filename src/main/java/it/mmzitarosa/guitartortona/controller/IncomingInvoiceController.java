@@ -1,18 +1,16 @@
 package it.mmzitarosa.guitartortona.controller;
 
-import it.mmzitarosa.guitartortona.dto.incominginvoice.IncomingInvoicesResponse;
 import it.mmzitarosa.guitartortona.dto.purchase.PurchaseItemDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.*;
 import it.mmzitarosa.guitartortona.service.IncomingInvoiceService;
 import it.mmzitarosa.guitartortona.service.PurchaseItemService;
 import it.mmzitarosa.guitartortona.utils.Constant.Status;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
-import org.springframework.data.web.PagedModel.PageMetadata;
+import org.springframework.data.web.SortDefault;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -29,21 +27,18 @@ public class IncomingInvoiceController {
 	}
 
 	/* == CREATE == */
-	@PostMapping("/incomingInvoice")
-	public IncomingInvoiceDTO createIncomingInvoice(@Valid @RequestBody CreateIncomingInvoiceDTO request) {
+	@PostMapping("/incomingInvoice") public IncomingInvoiceDTO createIncomingInvoice(@Valid @RequestBody CreateIncomingInvoiceDTO request) {
 		return service.createIncomingInvoice(request);
 	}
 
 	/* == READ == */
-	@GetMapping("/incomingInvoices")
-	public IncomingInvoicesResponse readIncomingInvoices(@PageableDefault(sort = {"date", "supplier" /*TODO Verificare se i fornitori sono al contrario*/, "id"}, direction = Sort.Direction.DESC, size = 20) Pageable pageable, @RequestParam(required = false) Status status, @RequestParam(name = "supplier", required = false) Long supplierId) {
-		Page<IncomingInvoiceDTO> incomingInvoices = service.readByFilters(status, supplierId, pageable);
-		return new IncomingInvoicesResponse(incomingInvoices.getContent(), new PageMetadata(incomingInvoices.getSize(), incomingInvoices.getNumber(), incomingInvoices.getTotalElements(), incomingInvoices.getTotalPages()), service.countIncomingInvoicesByStatus(Status.DRAFT));
+	@GetMapping("/incomingInvoices") public List<IncomingInvoiceLightDTO> readIncomingInvoices(@SortDefault(sort = {"date", "supplier", "id"}, direction = Sort.Direction.DESC) Sort sort) {
+		return service.readIncomingInvoices(false, sort);
 	}
 
 	@GetMapping("/archive/incomingInvoices")
-	public Page<IncomingInvoiceDTO> readArchivedIncomingInvoices(@PageableDefault(sort = {"date", "supplier" /*TODO Verificare se i fornitori sono al contrario*/, "id"}, direction = Sort.Direction.DESC, size = 20) Pageable pageable) {
-		return service.readIncomingInvoices(true, pageable);
+	public List<IncomingInvoiceLightDTO> readArchivedIncomingInvoices(@SortDefault(sort = {"archived_date"}, direction = Sort.Direction.DESC) Sort sort) {
+		return service.readIncomingInvoices(true, sort);
 	}
 
 	@GetMapping("/incomingInvoice/{id}")

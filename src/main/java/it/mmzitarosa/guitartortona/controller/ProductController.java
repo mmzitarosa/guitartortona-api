@@ -30,11 +30,11 @@ public class ProductController {
 	/* == READ == */
 	@GetMapping("/products") public List<ProductLightDTO> readProducts(@RequestParam(name = "search", required = false) String search, @SortDefault(sort = "id", direction = Sort.Direction.DESC) Sort sort) {
 		if (search != null) return service.searchProducts(search, sort);
-		return service.readProducts(sort);
+		return service.readProducts(false, sort);
 	}
 
-	@GetMapping("/archive/products") public List<ProductLightDTO> readArchivedProducts() {
-		return service.readProducts(true);
+	@GetMapping("/archive/products") public List<ProductLightDTO> readArchivedProducts(@SortDefault(sort = {"archived_date"}, direction = Sort.Direction.DESC) Sort sort) {
+		return service.readProducts(true, sort);
 	}
 
 	@GetMapping("/product/{id}") public ProductDTO readProduct(@PathVariable long id) {

@@ -2,10 +2,10 @@ package it.mmzitarosa.guitartortona.mapper;
 
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.CreateIncomingInvoiceDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceDTO;
+import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceLightDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceProductsDTO;
 import it.mmzitarosa.guitartortona.entity.IncomingInvoiceEntity;
 import it.mmzitarosa.guitartortona.entity.SupplierEntity;
-import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -27,12 +27,24 @@ import java.util.List;
 		return toDto(new IncomingInvoiceDTO(), entity);
 	}
 
+	public IncomingInvoiceLightDTO toLightDto(IncomingInvoiceEntity entity) {
+		IncomingInvoiceLightDTO dto = new IncomingInvoiceLightDTO();
+		dto.setId(entity.getId());
+		dto.setSupplierId(entity.getSupplier().getId());
+		dto.setDate(entity.getDate());
+		dto.setNumber(entity.getNumber());
+		dto.setAmount(entity.getAmount());
+		dto.setStatus(entity.getStatus());
+		dto.setDaysLeft(entity.getDaysLeft());
+		return dto;
+	}
+
 	public List<IncomingInvoiceDTO> toDto(List<IncomingInvoiceEntity> entities) {
 		return entities.stream().map(this::toDto).toList();
 	}
 
-	public Page<IncomingInvoiceDTO> toDto(Page<IncomingInvoiceEntity> entities) {
-		return entities.map(this::toDto);
+	public List<IncomingInvoiceLightDTO> toLightDto(List<IncomingInvoiceEntity> entities) {
+		return entities.stream().map(this::toLightDto).toList();
 	}
 
 	public IncomingInvoiceProductsDTO toProductsDto(IncomingInvoiceEntity entity) {
