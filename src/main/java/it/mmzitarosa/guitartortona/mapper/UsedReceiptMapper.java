@@ -2,9 +2,9 @@ package it.mmzitarosa.guitartortona.mapper;
 
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.CreateUsedReceiptDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptDTO;
+import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptLightDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptProductsDTO;
 import it.mmzitarosa.guitartortona.entity.UsedReceiptEntity;
-import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -26,12 +26,22 @@ public class UsedReceiptMapper {
 		return toDto(new UsedReceiptDTO(), entity);
 	}
 
+	private UsedReceiptLightDTO toLightDto(UsedReceiptEntity entity) {
+		UsedReceiptLightDTO dto = new UsedReceiptLightDTO();
+		dto.setId(entity.getId());
+		dto.setNumber(entity.getNumber());
+		dto.setDate(entity.getDate());
+		dto.setAmount(entity.getAmount());
+		dto.setQuantity(-1); //TODO Quantity
+		return dto;
+	}
+
 	public List<UsedReceiptDTO> toDto(List<UsedReceiptEntity> entities) {
 		return entities.stream().map(this::toDto).toList();
 	}
 
-	public Page<UsedReceiptDTO> toDto(Page<UsedReceiptEntity> entities) {
-		return entities.map(this::toDto);
+	public List<UsedReceiptLightDTO> toLightDto(List<UsedReceiptEntity> entities) {
+		return entities.stream().map(this::toLightDto).toList();
 	}
 
 	public UsedReceiptProductsDTO toProductsDto(UsedReceiptEntity entity) {

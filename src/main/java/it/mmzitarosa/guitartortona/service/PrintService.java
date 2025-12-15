@@ -3,8 +3,7 @@ package it.mmzitarosa.guitartortona.service;
 import it.mmzitarosa.guitartortona.dto.ledger.PrintableLedgerDTO;
 import it.mmzitarosa.guitartortona.mapper.LedgerEntityMapper;
 import it.mmzitarosa.guitartortona.repository.LedgerRepository;
-import it.mmzitarosa.guitartortona.utils.Constant.Status;
-import lombok.SneakyThrows;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -19,10 +18,10 @@ import java.time.format.DateTimeFormatter;
 		this.ledgerRepository = ledgerRepository;
 		this.ledgerEntityMapper = ledgerEntityMapper;
 	}
-	
-	@SneakyThrows public PrintableLedgerDTO readLedgerBetweenDates(String from, String to, String datePattern) {
+
+	public PrintableLedgerDTO readLedger(String from, String to, String datePattern, Sort sort) {
 		DateTimeFormatter formatter = DateTimeFormatter.ofPattern(datePattern);
-		return ledgerEntityMapper.toPrintableDto(ledgerRepository.findAllByStatusAndDateBetweenOrderByDateAsc(Status.COMPLETED, LocalDate.parse(from, formatter), LocalDate.parse(to, formatter)));
+		return ledgerEntityMapper.toPrintableDto(ledgerRepository.findAllByArchivedFalseAndDateBetween(LocalDate.parse(from, formatter), LocalDate.parse(to, formatter), sort));
 
 	}
 

@@ -2,12 +2,11 @@ package it.mmzitarosa.guitartortona.service;
 
 import it.mmzitarosa.guitartortona.dto.ledger.CreateLedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryDTO;
+import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryLightDTO;
 import it.mmzitarosa.guitartortona.entity.LedgerEntryEntity;
 import it.mmzitarosa.guitartortona.mapper.LedgerEntityMapper;
 import it.mmzitarosa.guitartortona.repository.LedgerRepository;
-import lombok.SneakyThrows;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -41,21 +40,17 @@ import static it.mmzitarosa.guitartortona.utils.Constant.Status;
 		return mapper.toDto(ledgerEntry);
 	}
 
-	public List<LedgerEntryDTO> readLedger(boolean archived) {
-		return mapper.toDto(repository.findAllByArchived(archived));
-	}
-
-	public Page<LedgerEntryDTO> readLedger(Pageable pageable) {
-		return mapper.toDto(repository.findAllByStatus(Status.COMPLETED, pageable));
-	}
-
-	@SneakyThrows public Page<LedgerEntryDTO> readLedgerBetweenDates(String from, String to, String datePattern, Pageable pageable) {
-		DateTimeFormatter formatter = DateTimeFormatter.ofPattern(datePattern);
-		return mapper.toDto(repository.findAllByStatusAndDateBetweenOrderByDateAsc(Status.COMPLETED, LocalDate.parse(from, formatter), LocalDate.parse(to, formatter), pageable));
-	}
-
 	public LedgerEntryDTO readLedgerEntry(long id) {
 		return mapper.toDto(repository.findById(id).orElseThrow(() -> new IllegalArgumentException("LedgerEntry not found")));
+	}
+
+	public List<LedgerEntryLightDTO> readLedger(boolean archived, Sort sort) {
+		return mapper.toLightDto(repository.findAllByArchived(archived, sort));
+	}
+
+	public List<LedgerEntryLightDTO> readLedger(String from, String to, String datePattern, Sort sort) {
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern(datePattern);
+		return mapper.toLightDto(repository.findAllByArchivedFalseAndDateBetween(LocalDate.parse(from, formatter), LocalDate.parse(to, formatter), sort));
 	}
 
 	public LedgerEntryDTO updateLedgerEntry(long id, CreateLedgerEntryDTO ledgerEntryDTO) {

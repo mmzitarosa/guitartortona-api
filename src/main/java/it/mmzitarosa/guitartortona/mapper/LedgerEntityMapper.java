@@ -2,12 +2,12 @@ package it.mmzitarosa.guitartortona.mapper;
 
 import it.mmzitarosa.guitartortona.dto.ledger.CreateLedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryDTO;
+import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryLightDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.PrintableLedgerDTO;
 import it.mmzitarosa.guitartortona.entity.BankEntity;
 import it.mmzitarosa.guitartortona.entity.LedgerEntryEntity;
 import it.mmzitarosa.guitartortona.utils.Constant.MovementType;
 import it.mmzitarosa.guitartortona.utils.Constant.PaymentMethod;
-import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -47,12 +47,29 @@ import static it.mmzitarosa.guitartortona.utils.Constant.PaymentMethod.CASH;
 		return dto;
 	}
 
+	public LedgerEntryLightDTO toLightDto(LedgerEntryEntity entity) {
+		LedgerEntryLightDTO dto = new LedgerEntryLightDTO();
+		dto.setId(entity.getId());
+		dto.setDate(entity.getDate());
+		dto.setInvoiceNumber(entity.getInvoiceNumber());
+		dto.setInvoiceDate(entity.getInvoiceDate());
+		dto.setDescription(entity.getDescription());
+		dto.setReason(entity.getReason());
+		dto.setPaymentMethod(entity.getPaymentMethod());
+		dto.setBankId(entity.getBank() != null ? entity.getBank().getId() : null);
+		dto.setPaymentType(entity.getPaymentType());
+		dto.setReceiptNumber(entity.getReceiptNumber());
+		dto.setMovementType(entity.getMovementType());
+		dto.setAmount(entity.getAmount());
+		return dto;
+	}
+
 	public List<LedgerEntryDTO> toDto(List<LedgerEntryEntity> entities) {
 		return entities.stream().map(this::toDto).toList();
 	}
 
-	public Page<LedgerEntryDTO> toDto(Page<LedgerEntryEntity> entities) {
-		return entities.map(this::toDto);
+	public List<LedgerEntryLightDTO> toLightDto(List<LedgerEntryEntity> entities) {
+		return entities.stream().map(this::toLightDto).toList();
 	}
 
 	public PrintableLedgerDTO toPrintableDto(List<LedgerEntryEntity> entities) {

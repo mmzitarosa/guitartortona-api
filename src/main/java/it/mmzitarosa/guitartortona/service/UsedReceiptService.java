@@ -2,14 +2,14 @@ package it.mmzitarosa.guitartortona.service;
 
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.CreateUsedReceiptDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptDTO;
+import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptLightDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptProductsDTO;
 import it.mmzitarosa.guitartortona.entity.PurchaseItemEntity;
 import it.mmzitarosa.guitartortona.entity.UsedReceiptEntity;
 import it.mmzitarosa.guitartortona.mapper.UsedReceiptMapper;
 import it.mmzitarosa.guitartortona.repository.UsedReceiptRepository;
 import it.mmzitarosa.guitartortona.utils.Constant.Status;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -44,18 +44,9 @@ import java.util.List;
 		return mapper.toProductsDto(getUsedReceipt(id));
 	}
 
-	public List<UsedReceiptDTO> readUsedReceipts(Status status) {
-		return mapper.toDto(repository.findAllByStatus(status));
+	public List<UsedReceiptLightDTO> readUsedReceipts(boolean archived, Sort sort) {
+		return mapper.toLightDto(repository.findAllByArchived(archived, sort));
 	}
-
-	public List<UsedReceiptDTO> readUsedReceipts(boolean archived) {
-		return mapper.toDto(repository.findAllByArchived(archived));
-	}
-
-	public Page<UsedReceiptDTO> readUsedReceipts(Pageable pageable) {
-		return mapper.toDto(repository.findAllByStatus(Status.COMPLETED, pageable));
-	}
-
 
 	public UsedReceiptDTO updateUsedReceipt(long id, CreateUsedReceiptDTO dto) {
 		UsedReceiptEntity usedReceipt = getUsedReceipt(id);
