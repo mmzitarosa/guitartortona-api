@@ -10,6 +10,6 @@ import java.util.List;
 public interface LedgerRepository extends JpaRepository<LedgerEntryEntity, Long> {
 	
 	List<LedgerEntryEntity> findAllByArchivedFalseAndDateBetween(LocalDate from, LocalDate to, Sort sort);
-	List<LedgerEntryEntity> findAllByArchived(boolean archived, Sort sort);
+	List<LedgerEntryEntity> findAllByDateGreaterThanEqualAndArchived(LocalDate date, boolean archived, Sort sort);
 
 }

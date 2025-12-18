@@ -28,13 +28,12 @@ public class LedgerController {
 	}
 
 	/* == READ == */
-	@GetMapping("/ledger") public List<LedgerEntryLightDTO> readLedger(@RequestParam(required = false) String from, @RequestParam(required = false) String to, @SortDefault(sort = {"date", "id"}, direction = Sort.Direction.DESC) Sort sort) {
-		if (from == null || to == null) return service.readLedger(false, sort);
-		return service.readLedger(from, to, "dd-MM-yyyy", sort);
+	@GetMapping("/ledger") public List<LedgerEntryLightDTO> readLedger(@RequestParam int year, @SortDefault(sort = {"date", "id"}, direction = Sort.Direction.DESC) Sort sort) {
+		return service.readLedger(year, false, sort);
 	}
 
-	@GetMapping("/archive/ledger") public List<LedgerEntryLightDTO> readArchivedLedgerEntries(@SortDefault(sort = {"date", "id"}, direction = Sort.Direction.DESC) Sort sort) {
-		return service.readLedger(true, sort);
+	@GetMapping("/archive/ledger") public List<LedgerEntryLightDTO> readArchivedLedgerEntries(@RequestParam int year, @SortDefault(sort = {"date", "id"}, direction = Sort.Direction.DESC) Sort sort) {
+		return service.readLedger(year, true, sort);
 	}
 
 	@GetMapping("/ledgerEntry/{id}") public LedgerEntryDTO readLedgerEntry(@PathVariable long id) {

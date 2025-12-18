@@ -10,7 +10,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import static it.mmzitarosa.guitartortona.utils.Constant.Status;
@@ -44,13 +43,8 @@ import static it.mmzitarosa.guitartortona.utils.Constant.Status;
 		return mapper.toDto(repository.findById(id).orElseThrow(() -> new IllegalArgumentException("LedgerEntry not found")));
 	}
 
-	public List<LedgerEntryLightDTO> readLedger(boolean archived, Sort sort) {
-		return mapper.toLightDto(repository.findAllByArchived(archived, sort));
-	}
-
-	public List<LedgerEntryLightDTO> readLedger(String from, String to, String datePattern, Sort sort) {
-		DateTimeFormatter formatter = DateTimeFormatter.ofPattern(datePattern);
-		return mapper.toLightDto(repository.findAllByArchivedFalseAndDateBetween(LocalDate.parse(from, formatter), LocalDate.parse(to, formatter), sort));
+	public List<LedgerEntryLightDTO> readLedger(int year, boolean archived, Sort sort) {
+		return mapper.toLightDto(repository.findAllByDateGreaterThanEqualAndArchived(LocalDate.of(year, 1, 1), archived, sort));
 	}
 
 	public LedgerEntryDTO updateLedgerEntry(long id, CreateLedgerEntryDTO ledgerEntryDTO) {

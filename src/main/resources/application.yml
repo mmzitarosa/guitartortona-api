@@ -34,10 +34,9 @@ management:
     health:
       show-details: when-authorized
 
-# TODO: abilitare compressione
-#server:
-#  compression:
-#    enabled: true
-#    mime-types:
-#      - application/json
-#    min-response-size: 1024
+server:
+  compression:
+    enabled: true
+    mime-types:
+      - application/json
+    min-response-size: 1024
