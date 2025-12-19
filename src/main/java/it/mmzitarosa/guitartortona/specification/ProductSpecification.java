@@ -1,18 +1,15 @@
 package it.mmzitarosa.guitartortona.specification;
 
-import it.mmzitarosa.guitartortona.entity.ProductEntity;
+import it.mmzitarosa.guitartortona.entity.view.ProductStockView;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static it.mmzitarosa.guitartortona.utils.Constant.Status.COMPLETED;
-import static it.mmzitarosa.guitartortona.utils.Constant.Status.DRAFT;
-
 public class ProductSpecification {
 
-	public static Specification<ProductEntity> withSearch(String search) {
+	public static Specification<ProductStockView> withSearch(String search) {
 		return (root, query, cb) -> {
 			if (search == null || search.isBlank()) {
 				return cb.conjunction();
@@ -28,15 +25,15 @@ public class ProductSpecification {
 				String pattern = "%" + token + "%";
 
 				List<Predicate> orPredicates = new ArrayList<>();
-				orPredicates.add(cb.like(cb.lower(root.get("category").get("name")), pattern));
-				orPredicates.add(cb.like(cb.lower(root.get("brand").get("name")), pattern));
+				orPredicates.add(cb.like(cb.lower(root.get("categoryName")), pattern));
+				orPredicates.add(cb.like(cb.lower(root.get("brandName")), pattern));
 				orPredicates.add(cb.like(cb.lower(root.get("description")), pattern));
 
 				// Ogni token deve essere trovato in almeno UN campo
 				predicates.add(cb.or(orPredicates.toArray(new Predicate[0])));
 			}
 
-			predicates.add(root.get("status").in(DRAFT, COMPLETED));
+			predicates.add(root.get("archived").in(false));
 
 			// Tutti i token devono essere presenti
 			return cb.and(predicates.toArray(new Predicate[0]));

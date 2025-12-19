@@ -4,6 +4,7 @@ import it.mmzitarosa.guitartortona.dto.product.CreateProductDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductLightDTO;
 import it.mmzitarosa.guitartortona.service.ProductService;
+import it.mmzitarosa.guitartortona.service.ProductStockService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.SortDefault;
@@ -16,10 +17,12 @@ public class ProductController {
 
 	/* == CONSTANTS == */
 	private final ProductService service;
+	private final ProductStockService stockService;
 
 	/* == CONSTRUCTOR == */
-	public ProductController(ProductService service) {
+	public ProductController(ProductService service, ProductStockService stockService) {
 		this.service = service;
+		this.stockService = stockService;
 	}
 
 	/* == CREATE == */
@@ -29,12 +32,12 @@ public class ProductController {
 
 	/* == READ == */
 	@GetMapping("/products") public List<ProductLightDTO> readProducts(@RequestParam(name = "search", required = false) String search, @SortDefault(sort = "id", direction = Sort.Direction.DESC) Sort sort) {
-		if (search != null) return service.searchProducts(search, sort);
-		return service.readProducts(false, sort);
+		if (search != null) return stockService.searchProducts(search, sort);
+		return stockService.readProducts(false, sort);
 	}
 
 	@GetMapping("/archive/products") public List<ProductLightDTO> readArchivedProducts(@SortDefault(sort = {"archived_date"}, direction = Sort.Direction.DESC) Sort sort) {
-		return service.readProducts(true, sort);
+		return stockService.readProducts(true, sort);
 	}
 
 	@GetMapping("/product/{id}") public ProductDTO readProduct(@PathVariable long id) {

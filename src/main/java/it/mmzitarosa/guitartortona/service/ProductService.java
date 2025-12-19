@@ -2,17 +2,12 @@ package it.mmzitarosa.guitartortona.service;
 
 import it.mmzitarosa.guitartortona.dto.product.CreateProductDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductDTO;
-import it.mmzitarosa.guitartortona.dto.product.ProductLightDTO;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
 import it.mmzitarosa.guitartortona.mapper.ProductMapper;
 import it.mmzitarosa.guitartortona.repository.ProductRepository;
-import it.mmzitarosa.guitartortona.specification.ProductSpecification;
 import it.mmzitarosa.guitartortona.utils.Constant.ProductCondition;
 import it.mmzitarosa.guitartortona.utils.Constant.Status;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 public class ProductService {
@@ -44,14 +39,6 @@ public class ProductService {
 
 	public ProductDTO searchProductByCode(String code) {
 		return mapper.toDto(repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(code, code).orElseThrow(() -> new IllegalArgumentException("Product not found")));
-	}
-
-	public List<ProductLightDTO> readProducts(boolean archived, Sort sort) {
-		return mapper.toLightDto(repository.findAllByArchived(archived, sort));
-	}
-
-	public List<ProductLightDTO> searchProducts(String search, Sort sort) {
-		return mapper.toLightDto(repository.findAll(ProductSpecification.withSearch(search), sort));
 	}
 
 	public ProductDTO updateProduct(long id, CreateProductDTO dto) {

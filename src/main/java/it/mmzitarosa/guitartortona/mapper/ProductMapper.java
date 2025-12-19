@@ -2,7 +2,6 @@ package it.mmzitarosa.guitartortona.mapper;
 
 import it.mmzitarosa.guitartortona.dto.product.CreateProductDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductDTO;
-import it.mmzitarosa.guitartortona.dto.product.ProductLightDTO;
 import it.mmzitarosa.guitartortona.entity.BrandEntity;
 import it.mmzitarosa.guitartortona.entity.CategoryEntity;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
@@ -38,25 +37,8 @@ import java.util.List;
 		return dto;
 	}
 
-	private ProductLightDTO toLightDto(ProductEntity entity) {
-		ProductLightDTO dto = new ProductLightDTO();
-		dto.setId(entity.getId());
-		dto.setCategoryId(entity.getCategory().getId());
-		dto.setBrandId(entity.getBrand().getId());
-		dto.setDescription(entity.getDescription());
-		dto.setCondition(entity.getCondition());
-		dto.setPrice(entity.getPrice());
-		dto.setQuantity(-1); //TODO Quantity
-
-		return dto;
-	}
-
 	public List<ProductDTO> toDto(List<ProductEntity> entities) {
 		return entities.stream().map(this::toDto).toList();
-	}
-
-	public List<ProductLightDTO> toLightDto(List<ProductEntity> entities) {
-		return entities.stream().map(this::toLightDto).toList();
 	}
 
 	public ProductEntity toEntity(CreateProductDTO dto, CategoryEntity category, BrandEntity brand) {
