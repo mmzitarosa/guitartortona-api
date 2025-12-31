@@ -39,7 +39,8 @@ CREATE TABLE `product` (
   `notes` varchar(255) DEFAULT NULL,
   `created_date` datetime NOT NULL,
   `updated_date` datetime NOT NULL,
-  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2,3)),
+  `stock` smallint(4) DEFAULT 0,
+  `stock_pending` smallint(4) DEFAULT 0,
 
   PRIMARY KEY (`id`),
   UNIQUE KEY (`code`),
@@ -51,7 +52,6 @@ CREATE TABLE `product` (
 );
 
 ALTER TABLE `product` MODIFY COLUMN `condition_id` tinyint(4) NOT NULL COMMENT '0=NEW, 1=USED';
-ALTER TABLE `product` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED, 3=ARCHIVED';
 
 -- Purchase table
 CREATE TABLE `purchase` (
@@ -61,12 +61,15 @@ CREATE TABLE `purchase` (
   `notes` varchar(255) DEFAULT NULL,
   `created_date` datetime NOT NULL,
   `updated_date` datetime NOT NULL,
-  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2,3)),
+  `completed_date` datetime DEFAULT NULL,
+  `archived_date` datetime DEFAULT NULL,
+  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2)),
+  `archived` boolean DEFAULT false,
 
   PRIMARY KEY (`id`)
 );
 
-ALTER TABLE `purchase` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED, 3=ARCHIVED';
+ALTER TABLE `purchase` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED';
 
 -- 3. RICREA incoming_invoice con nuova struttura
 CREATE TABLE `incoming_invoice` (
@@ -102,7 +105,6 @@ CREATE TABLE `purchase_item` (
   `quantity` smallint(4) NOT NULL,
   `created_date` datetime NOT NULL,
   `updated_date` datetime NOT NULL,
-  `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2,3)),
 
   PRIMARY KEY (`id`),
   UNIQUE KEY (`purchase_id`, `product_id`),
@@ -112,16 +114,35 @@ CREATE TABLE `purchase_item` (
   CONSTRAINT FOREIGN KEY (`product_id`) REFERENCES `product` (`id`)
 );
 
-ALTER TABLE `purchase_item` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED, 3=ARCHIVED';
-
 -- 6. MODIFICA ledger (aggiungi colonne mancanti e riordina notes)
 ALTER TABLE `ledger` MODIFY COLUMN `notes` varchar(255) DEFAULT NULL AFTER `amount`;
-ALTER TABLE `ledger` ADD COLUMN `updated_date` datetime NULL AFTER `created_date`;
-ALTER TABLE `ledger` ADD COLUMN `status` tinyint(4) NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED, 3=ARCHIVED' AFTER `updated_date`;
+ALTER TABLE `ledger` ADD COLUMN `updated_date` datetime DEFAULT NULL AFTER `created_date`;
+ALTER TABLE `ledger` ADD COLUMN `completed_date` datetime NULL AFTER `updated_date`;
+ALTER TABLE `ledger` ADD COLUMN `archived_date` datetime NULL AFTER `completed_date`;
+ALTER TABLE `ledger` ADD COLUMN `status` tinyint(4) DEFAULT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED' AFTER `archived_date`;
+ALTER TABLE `ledger` ADD COLUMN `archived` boolean DEFAULT false AFTER `status`;
 
 UPDATE `ledger` SET `updated_date` = `created_date`;
 UPDATE `ledger` SET `status` = 2;
 
 -- Ora rendile NOT NULL
 ALTER TABLE `ledger` MODIFY COLUMN `updated_date` datetime NOT NULL;
-ALTER TABLE `ledger` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED, 3=ARCHIVED';
+ALTER TABLE `ledger` MODIFY COLUMN `status` tinyint(4) NOT NULL CHECK (`status` IN (0,1,2));
+ALTER TABLE `ledger` MODIFY COLUMN `status` tinyint(4) NOT NULL COMMENT '0=DRAFT, 1=PENDING, 2=COMPLETED';
+
+-- 7. Sale table
+CREATE TABLE `sale` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `product_id` bigint(20) NOT NULL,
+  `date` datetime NOT NULL,
+  `vat` decimal(5,2) DEFAULT NULL,
+  `sale_price` decimal(12,2) DEFAULT NULL,
+  `quantity` smallint(4) NOT NULL,
+  `notes` varchar(255) DEFAULT NULL,
+  `created_date` datetime NOT NULL,
+  `updated_date` datetime NOT NULL,
+
+  PRIMARY KEY (`id`),
+  KEY (`product_id`),
+  CONSTRAINT FOREIGN KEY (`product_id`) REFERENCES `product` (`id`)
+);

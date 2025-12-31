@@ -1,19 +1,21 @@
 package it.mmzitarosa.guitartortona.entity;
 
-import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
+import jakarta.persistence.Entity;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.ToString;
+import lombok.ToString.Exclude;
 
 import java.util.List;
 
-@Entity @Getter @Setter 
-@Table(name = "bank") @ToString
-public class BankEntity {
+@Entity @Table(name = "bank")
+@Data @ToString(callSuper = true)
+@EqualsAndHashCode(callSuper = true)
+public class BankEntity extends IdEntity {
 
-	@Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
 	private String name;
 
-	@ToString.Exclude @OneToMany(mappedBy = "bank") private List<LedgerEntryEntity> ledgerEntries;
-
+	@Exclude @OneToMany(mappedBy = "bank") private List<LedgerEntryEntity> ledgerEntries;
 }

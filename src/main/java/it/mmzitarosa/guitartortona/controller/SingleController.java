@@ -1,19 +1,22 @@
 package it.mmzitarosa.guitartortona.controller;
 
-import it.mmzitarosa.guitartortona.dto.BankDTO;
-import it.mmzitarosa.guitartortona.dto.BrandDTO;
-import it.mmzitarosa.guitartortona.dto.CategoryDTO;
-import it.mmzitarosa.guitartortona.dto.SupplierDTO;
+import it.mmzitarosa.guitartortona.dto.bank.BankDTO;
+import it.mmzitarosa.guitartortona.dto.brand.BrandDTO;
+import it.mmzitarosa.guitartortona.dto.category.CategoryDTO;
+import it.mmzitarosa.guitartortona.dto.supplier.SupplierDTO;
 import it.mmzitarosa.guitartortona.service.BankService;
 import it.mmzitarosa.guitartortona.service.BrandService;
 import it.mmzitarosa.guitartortona.service.CategoryService;
 import it.mmzitarosa.guitartortona.service.SupplierService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@RequiredArgsConstructor
 @RestController @RequestMapping("/api/v1")
 public class SingleController {
 
@@ -23,32 +26,24 @@ public class SingleController {
 	private final CategoryService categoryService;
 	private final SupplierService supplierService;
 
-	/* == CONSTRUCTOR == */
-	public SingleController(BankService bankService, BrandService brandService, CategoryService categoryService, SupplierService supplierService) {
-		this.bankService = bankService;
-		this.brandService = brandService;
-		this.categoryService = categoryService;
-		this.supplierService = supplierService;
-	}
-
 	/* == READ BANKS == */
-	@GetMapping("/banks") public List<BankDTO> readBanks() {
-		return bankService.readBanks();
+	@GetMapping("/banks") public ResponseEntity<List<BankDTO>> getAllBanks() {
+		return ResponseEntity.ok(bankService.getAllBanks());
 	}
 
 	/* == READ BRANDS == */
-	@GetMapping("/brands") public List<BrandDTO> readBrands() {
-		return brandService.readBrands();
+	@GetMapping("/brands") public ResponseEntity<List<BrandDTO>> getAllBrands() {
+		return ResponseEntity.ok(brandService.getAllBrands());
 	}
 
 	/* == READ CATEGORIES == */
-	@GetMapping("/categories") public List<CategoryDTO> readCategories() {
-		return categoryService.readCategories();
+	@GetMapping("/categories") public ResponseEntity<List<CategoryDTO>> getAllCategories() {
+		return ResponseEntity.ok(categoryService.getAllCategories());
 	}
 
 	/* == READ SUPPLIERS == */
-	@GetMapping("/suppliers") public List<SupplierDTO> readSuppliers() {
-		return supplierService.readSuppliers();
+	@GetMapping("/suppliers") public ResponseEntity<List<SupplierDTO>> getAllSuppliers() {
+		return ResponseEntity.ok(supplierService.getAllSuppliers());
 	}
 
 }

@@ -1,19 +1,20 @@
 package it.mmzitarosa.guitartortona.entity;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
-@Entity @Getter @Setter
-@Table(name = "purchase_item") @ToString(callSuper = true)
-public class PurchaseItemEntity extends StatusEntity {
-
-	@ManyToOne(optional = false) @JoinColumn(name = "purchase_id") private PurchaseEntity purchase;
-	@ManyToOne(optional = false) @JoinColumn(name = "product_id") private ProductEntity product;
+@Entity @Table(name = "purchase_item")
+@Data @ToString(callSuper = true)
+@EqualsAndHashCode(callSuper = true)
+public class PurchaseItemEntity extends DateEntity {
 
 	private Double vat;
 	@Column(name = "purchase_price") private Double purchasePrice;
 	private Integer quantity;
+
+	@ManyToOne @JoinColumn(name = "purchase_id") private PurchaseEntity purchase;
+	@ManyToOne @JoinColumn(name = "product_id") private ProductEntity product;
 
 }

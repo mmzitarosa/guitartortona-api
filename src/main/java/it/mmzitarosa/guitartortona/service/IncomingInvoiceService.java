@@ -1,108 +1,149 @@
 package it.mmzitarosa.guitartortona.service;
 
-import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.CreateIncomingInvoiceDTO;
-import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceDTO;
-import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceLightDTO;
-import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceProductsDTO;
+import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceDetailDTO;
+import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceInput;
+import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceListDTO;
 import it.mmzitarosa.guitartortona.entity.IncomingInvoiceEntity;
-import it.mmzitarosa.guitartortona.entity.PurchaseItemEntity;
-import it.mmzitarosa.guitartortona.mapper.IncomingInvoiceMapper;
+import it.mmzitarosa.guitartortona.entity.SupplierEntity;
 import it.mmzitarosa.guitartortona.repository.IncomingInvoiceRepository;
 import it.mmzitarosa.guitartortona.utils.Constant.Status;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-@Service public class IncomingInvoiceService {
+@RequiredArgsConstructor
+@Service @Transactional
+public class IncomingInvoiceService {
 
-	/* == CONSTANTS == */
 	private final IncomingInvoiceRepository repository;
-	private final IncomingInvoiceMapper mapper;
 	private final SupplierService supplierService;
 
-	/* == CONSTRUCTOR == */
-	public IncomingInvoiceService(IncomingInvoiceRepository repository, IncomingInvoiceMapper mapper, SupplierService supplierService) {
-		this.repository = repository;
-		this.mapper = mapper;
-		this.supplierService = supplierService;
+	/**
+	 * GET /incomingInvoices
+	 * GET /archived/incomingInvoices
+	 */
+	@Transactional(readOnly = true) public List<IncomingInvoiceListDTO> getAllIncomingInvoices(boolean archived, Sort sort) {
+		return repository.findAllByArchived(archived, sort).stream()
+				.map(IncomingInvoiceListDTO::of)
+				.toList();
 	}
 
-	/* == PUBLIC METHODS == */
-	public IncomingInvoiceDTO createIncomingInvoice(CreateIncomingInvoiceDTO dto) {
-		// Converto il DTO in oggetto, passo anche il fornitore recuperato da DB o lo creo
-		IncomingInvoiceEntity incomingInvoice = mapper.toEntity(dto, supplierService.getOrInsertSupplier(dto.getSupplierId(), dto.getSupplierName()));
-		// Essendo primo inserimento la salvo come bozza
-		incomingInvoice.setStatus(Status.DRAFT);
-		// Salvo fattura su DB
-		incomingInvoice = repository.save(incomingInvoice);
-		// Converto l'entity della fattura in DTO
-		return mapper.toDto(incomingInvoice);
-	}
-
-	public IncomingInvoiceProductsDTO readIncomingInvoice(long id, Status... statuses) {
-		IncomingInvoiceEntity entity = getIncomingInvoice(id);
-		entity.setItems(entity.getItems().stream()
-				.filter(item -> List.of(statuses).contains(item.getStatus()))
-				.toList());
-		return mapper.toProductsDto(entity);
-	}
-
-	public List<IncomingInvoiceLightDTO> readIncomingInvoices(boolean archived, Sort sort) {
-		return mapper.toLightDto(repository.findAllByArchived(archived, sort));
-	}
-
-	public IncomingInvoiceDTO updateIncomingInvoice(long id, CreateIncomingInvoiceDTO dto) {
+	/**
+	 * GET /incomingInvoice/{id}
+	 */
+	@Transactional(readOnly = true) public IncomingInvoiceDetailDTO getIncomingInvoiceDetail(Long id) {
 		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
-		// Converto il DTO in oggetto, passo anche il fornitore recuperato da DB o lo creo
-		incomingInvoice = mapper.toEntity(incomingInvoice, dto, supplierService.getOrInsertSupplier(dto.getSupplierId(), dto.getSupplierName()));
-		// Salvo fattura su DB
-		incomingInvoice = repository.save(incomingInvoice);
-		// Converto l'entity della fattura in DTO
-		return mapper.toDto(incomingInvoice);
+
+		return IncomingInvoiceDetailDTO.of(incomingInvoice);
 	}
 
-	public void completeIncomingInvoice(long id) {
-		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
-		// Aggiorno lo stato della fattura
-		incomingInvoice.setStatus(Status.COMPLETED);
-		// Per ogni item aggiorno lo stato della relazione e prodotto associato
-		for (PurchaseItemEntity item : incomingInvoice.getItems()) {
-			// Aggiorno lo stato della relazione
-			item.setStatus(Status.COMPLETED);
-			// Aggiorno lo stato del prodotto, potrebbe già essere completed
-			item.getProduct().setStatus(Status.COMPLETED);
+	/**
+	 * POST /incomingInvoice
+	 */
+	public IncomingInvoiceDetailDTO createIncomingInvoice(IncomingInvoiceInput input) {
+		// Trova o crea supplier
+		SupplierEntity supplier = supplierService.findOrCreateSupplier(input.supplier());
+
+		// Verifica univocità numero fattura per supplier
+		if (repository.existsBySupplierAndNumber(supplier, input.number())) {
+			throw new RuntimeException("Invoice number already exists for this supplier: " + input.number());
 		}
-		// Salvo il tutto su DB
-		repository.save(incomingInvoice);
+
+		// Crea purchase
+		IncomingInvoiceEntity incomingInvoice = new IncomingInvoiceEntity();
+		incomingInvoice.setSupplier(supplier);
+		incomingInvoice.setDate(input.date());
+		incomingInvoice.setNumber(input.number());
+		incomingInvoice.setAmount(input.amount());
+		incomingInvoice.setNotes(input.notes());
+		incomingInvoice.setStatus(Status.DRAFT);
+		incomingInvoice.setArchived(false);
+		incomingInvoice = repository.save(incomingInvoice);
+
+		return getIncomingInvoiceDetail(incomingInvoice.getId());
 	}
 
-	public void deleteIncomingInvoice(long id) {
+	/**
+	 * PUT /incomingInvoice/{id}
+	 */
+	public IncomingInvoiceDetailDTO updateIncomingInvoice(Long id, IncomingInvoiceInput input) {
 		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
-		// Doppio comportamento, si basa su stato precedente
-		// Se già ARCHIVED da cambio di stato precedente, viene eliminato
+
+		// Trova o crea supplier
+		SupplierEntity supplier = supplierService.findOrCreateSupplier(input.supplier());
+
+		// Verifica univocità numero fattura (escludi se stessa)
+		if (!incomingInvoice.getNumber().equals(input.number()) &&
+				repository.existsBySupplierAndNumber(supplier, input.number())) {
+			throw new RuntimeException("Invoice number already exists for this supplier: " + input.number());
+		}
+
+		// Aggiorna invoice
+		incomingInvoice.setSupplier(supplier);
+		incomingInvoice.setDate(input.date());
+		incomingInvoice.setNumber(input.number());
+		incomingInvoice.setAmount(input.amount());
+		incomingInvoice.setNotes(input.notes());
+		repository.save(incomingInvoice);
+
+		return getIncomingInvoiceDetail(id);
+	}
+
+
+	/**
+	 * PATCH /incomingInvoice/{id}/complete
+	 */
+	public IncomingInvoiceDetailDTO completeIncomingInvoice(Long id) {
+		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
+
+		if (!incomingInvoice.isCompleted()) {
+			// Completa purchase
+			incomingInvoice.setStatus(Status.COMPLETED);
+			repository.save(incomingInvoice);
+		}
+
+		return getIncomingInvoiceDetail(id);
+	}
+
+	/**
+	 * PATCH /incomingInvoice/{id}/restore
+	 */
+	public IncomingInvoiceDetailDTO restoreIncomingInvoice(Long id) {
+		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
+
 		if (incomingInvoice.isArchived()) {
-			// Elimino da fattura
-			// L'eliminazione della fattura elimina in cascata anche la relazione.
-			// Il prodotto rimane così come da ultimo salvataggio, potrebbe essere usato da altre relazioni
-			repository.deleteById(id);
+			incomingInvoice.setArchived(false);
+			repository.save(incomingInvoice);
+		}
+
+		return getIncomingInvoiceDetail(id);
+	}
+
+	/**
+	 * DELETE /incomingInvoice/{id}
+	 */
+	public void deleteIncomingInvoice(Long id) {
+		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
+
+		if (incomingInvoice.isArchived()) {
+			// Già archiviata -> elimina
+			repository.delete(incomingInvoice);
 		} else {
-			// Aggiorno lo stato della fattura
+			// Prima volta -> archivia
 			incomingInvoice.setArchived(true);
-			// Per ogni item aggiorno lo stato della relazione
-			for (PurchaseItemEntity item : incomingInvoice.getItems()) {
-				// Aggiorno lo stato della relazione
-				// Il prodotto rimane così come da ultimo salvataggio, potrebbe essere usato da altre relazioni
-				item.setArchived(true);
-			}
-			// Salvo il tutto su DB
 			repository.save(incomingInvoice);
 		}
 	}
 
-	/* == PACKAGE METHODS == */
-	IncomingInvoiceEntity getIncomingInvoice(long id) {
-		return repository.findById(id).orElseThrow(() -> new IllegalArgumentException("IncomingInvoice not found"));
+	/**
+	 * Helper: Recupera incomingInvoice
+	 */
+	protected IncomingInvoiceEntity getIncomingInvoice(long id) {
+		return repository.findById(id)
+				.orElseThrow(() -> new RuntimeException("Invoice not found: " + id));
 	}
 
 }

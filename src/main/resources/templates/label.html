@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Etichette</title>
+    <style>
+        @font-face {
+            font-family: 'Code';
+            src: local('Code'), url('/fonts/Code39.ttf') format('truetype');
+        }
+
+        @font-face {
+            font-family: 'Myriad';
+            src: local('Myriad'), url('/fonts/Myriad Pro Light.otf') format('truetype');
+        }
+
+        body{
+            font-size: 22px;
+            margin: 0;
+            padding: 0;
+            font-family: Myriad;
+            text-transform: uppercase;
+            background-color: gray;
+        }
+        .label{
+            background-color: white;
+            width: 587px;
+            height: 230px;
+            display: flex;
+            flex-direction: row;
+            gap: 12px;
+        }
+        .logo {
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+        .logo img {
+            height: 230px;
+            width: auto;
+            display: block;
+        }
+        .category {
+            height: 100%;
+            width: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .category span {
+            display: inline-block;
+            transform: rotate(-90deg);
+            white-space: nowrap;
+        }
+        .content {
+            height: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            overflow: hidden;
+        }
+        .top,
+        .bottom {
+          width: 100%;
+        }
+        .bottom {
+          margin-top: auto;
+          margin-bottom: -4px;
+        }
+
+        .top > div,
+        .bottom > div {
+          max-width: 100%;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          text-align: right;
+        }
+        .code {
+            font-family: "Code";
+            font-size: 44px;
+        }
+        .brand {
+            font-size: 34px;
+            line-height: 1;
+        }
+        .description {
+            font-size: 24px;
+            line-height: 1;
+        }
+    </style>
+</head>
+<body>
+
+<div class="label" th:each="i, stat : ${#numbers.sequence(1,quantity)}">
+    <div class="logo">
+        <img src="/images/logo90.png" alt="Logo Guitar"/>
+    </div>
+    <div class="category">
+        <span th:text="${product.category}">Categoria</span>
+    </div>
+
+    <div class="content">
+        <div class="top">
+            <div class="code" th:text="'*'+${product.internalCode}+'*'">*G000000N*</div>
+        </div>
+        <div class="bottom">
+            <div class="brand" th:text="${product.brand}">Fender</div>
+            <div class="description" th:text="${product.description}">Stratocaster American Standard</div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

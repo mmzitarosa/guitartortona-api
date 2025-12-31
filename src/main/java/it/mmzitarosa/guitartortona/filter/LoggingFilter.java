@@ -36,10 +36,10 @@ public class LoggingFilter extends OncePerRequestFilter {
 		ContentCachingResponseWrapper wrappedResponse = new ContentCachingResponseWrapper(response);
 
 		try {
-			logRequest(wrappedRequest, queryParams);
+			if (request.getRequestURI().startsWith("/api")) logRequest(wrappedRequest, queryParams);
 			filterChain.doFilter(wrappedRequest, wrappedResponse);
 		} finally {
-			logResponse(wrappedRequest, wrappedResponse, queryParams, start);
+			if (request.getRequestURI().startsWith("/api")) logResponse(wrappedRequest, wrappedResponse, queryParams, start);
 			wrappedResponse.copyBodyToResponse();
 		}
 	}

@@ -1,72 +1,136 @@
 package it.mmzitarosa.guitartortona.service;
 
-import it.mmzitarosa.guitartortona.dto.product.CreateProductDTO;
-import it.mmzitarosa.guitartortona.dto.product.ProductDTO;
+import it.mmzitarosa.guitartortona.dto.product.ProductDetailDTO;
+import it.mmzitarosa.guitartortona.dto.product.ProductInput;
+import it.mmzitarosa.guitartortona.dto.product.ProductListDTO;
+import it.mmzitarosa.guitartortona.entity.BrandEntity;
+import it.mmzitarosa.guitartortona.entity.CategoryEntity;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
-import it.mmzitarosa.guitartortona.mapper.ProductMapper;
 import it.mmzitarosa.guitartortona.repository.ProductRepository;
+import it.mmzitarosa.guitartortona.specification.ProductSpecification;
 import it.mmzitarosa.guitartortona.utils.Constant.ProductCondition;
-import it.mmzitarosa.guitartortona.utils.Constant.Status;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-@Service
+import java.util.List;
+
+@RequiredArgsConstructor
+@Service @Transactional
 public class ProductService {
 
 	/* == CONSTANTS == */
 	private final ProductRepository repository;
-	private final ProductMapper mapper;
 	private final CategoryService categoryService;
 	private final BrandService brandService;
 
-	/* == CONSTRUCTOR == */
-	public ProductService(ProductRepository repository, ProductMapper mapper, CategoryService categoryService, BrandService brandService) {
-		this.repository = repository;
-		this.mapper = mapper;
-		this.categoryService = categoryService;
-		this.brandService = brandService;
+	/**
+	 * GET /products
+	 */
+	@Transactional(readOnly = true) public List<ProductListDTO> getAllProducts(Sort sort) {
+		return repository.findAllByStockGreaterThanOrStockPendingGreaterThan(0, 0, sort).stream()
+				.map(ProductListDTO::of)
+				.toList();
 	}
 
-	/* == PUBLIC METHODS == */
-	public ProductDTO createProduct(CreateProductDTO dto) {
-		ProductEntity product = createProduct(dto, ProductCondition.NEW);
-		// Converto l'entity dell prodotto in DTO
-		return mapper.toDto(product);
+	/**
+	 * GET /products?search={search}
+	 */
+	@Deprecated @Transactional(readOnly = true) public List<ProductListDTO> searchProducts(String search, Sort sort) {
+		return repository.findAll(ProductSpecification.withSearch(search), sort).stream()
+				.map(ProductListDTO::of)
+				.toList();
 	}
 
-	public ProductDTO readProduct(long id) {
-		return mapper.toDto(getProduct(id));
-	}
-
-	public ProductDTO searchProductByCode(String code) {
-		return mapper.toDto(repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(code, code).orElseThrow(() -> new IllegalArgumentException("Product not found")));
-	}
-
-	public ProductDTO updateProduct(long id, CreateProductDTO dto) {
+	/**
+	 * GET /product/{id}
+	 */
+	@Transactional(readOnly = true) public ProductDetailDTO getProductDetail(Long id) {
 		ProductEntity product = getProduct(id);
-		// Converto il DTO in oggetto, passo anche la categoria e la marca recuperata da DB o la creo
-		product = mapper.toEntity(product, dto, categoryService.getCategory(dto.getCategoryId()), brandService.getOrInsertBrand(dto.getBrandId(), dto.getBrandName()));
-		// Salvo prodotto su DB
-		product = repository.save(product);
-		// Converto l'entity della fattura in DTO
-		return mapper.toDto(product);
+		return ProductDetailDTO.of(product);
 	}
 
-	public void deleteProduct(long id) {
-		repository.deleteById(id);
+	/**
+	 * GET /product?code={code}
+	 */
+	@Transactional(readOnly = true) public ProductDetailDTO getProductDetailByCode(String code) {
+		ProductEntity product = repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(code, code)
+				.orElseThrow(() -> new RuntimeException("Product not found: " + code));
+		return ProductDetailDTO.of(product);
 	}
 
-	/* == PACKAGE METHODS == */
-	ProductEntity getProduct(long id) {
-		return repository.findById(id).orElseThrow(() -> new IllegalArgumentException("Product not found"));
+	/**
+	 * PUT /product/{id}
+	 */
+	public ProductDetailDTO updateProduct(Long id, ProductInput input) {
+		ProductEntity product = getProduct(id);
+
+		product = updateProduct(product, input);
+
+		return getProductDetail(id);
 	}
 
-	ProductEntity createProduct(CreateProductDTO dto, ProductCondition condition) {
-		// Converto il DTO in oggetto, passo anche la categoria e la marca recuperata da DB o la creo
-		ProductEntity product = mapper.toEntity(dto, categoryService.getCategory(dto.getCategoryId()), brandService.getOrInsertBrand(dto.getBrandId(), dto.getBrandName()));
-		// Essendo primo inserimento lo salvo come bozza
-		product.setStatus(Status.DRAFT);
+
+	/**
+	 * Helper: Recupera product
+	 */
+	protected ProductEntity getProduct(long id) {
+		return repository.findById(id)
+				.orElseThrow(() -> new RuntimeException("Product not found: " + id));
+	}
+
+	/**
+	 * Helper: Trova o crea product
+	 */
+	protected ProductEntity findOrCreateProduct(ProductInput input, ProductCondition condition) {
+		if (input.id() != null)
+			return getProduct(input.id());
+
+		// Cerca per code
+		if (input.code() != null)
+			return repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(input.code(), input.code())
+					.orElseGet(() -> createNewProduct(input, condition));
+
+		return createNewProduct(input, condition);
+	}
+
+	/**
+	 * Helper: Crea nuovo product
+	 */
+	private ProductEntity createNewProduct(ProductInput input, ProductCondition condition) {
+		BrandEntity brand = brandService.findOrCreateBrand(input.brand());
+		CategoryEntity category = categoryService.getCategory(input.category().id());
+
+		ProductEntity product = new ProductEntity();
+		product.setCode(input.code());
+		product.setBrand(brand);
+		product.setCategory(category);
+		product.setDescription(input.description());
+		product.setPrice(input.price());
+		product.setReorderPoint(input.reorderPoint());
+		product.setNotes(input.notes());
 		product.setCondition(condition);
-		// Salvo prodotto su DB
+
 		return repository.save(product);
 	}
+
+	/**
+	 * Helper: Modifica product
+	 */
+	protected ProductEntity updateProduct(ProductEntity product, ProductInput input) {
+		BrandEntity brand = brandService.findOrCreateBrand(input.brand());
+		CategoryEntity category = categoryService.getCategory(input.category().id());
+
+		product.setCode(input.code());
+		product.setBrand(brand);
+		product.setCategory(category);
+		product.setDescription(input.description());
+		product.setPrice(input.price());
+		product.setReorderPoint(input.reorderPoint());
+		product.setNotes(input.notes());
+
+		return repository.save(product);
+	}
+
 }

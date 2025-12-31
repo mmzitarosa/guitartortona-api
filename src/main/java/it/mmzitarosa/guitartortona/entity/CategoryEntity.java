@@ -1,21 +1,23 @@
 package it.mmzitarosa.guitartortona.entity;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import java.util.List;
 
-@Entity @Getter @Setter
-@Table(name = "category") @ToString
-public class CategoryEntity {
+import static lombok.ToString.Exclude;
 
-	@Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+@Entity @Table(name = "category")
+@Data @ToString(callSuper = true)
+@EqualsAndHashCode(callSuper = true)
+public class CategoryEntity extends IdEntity {
+
 	private String name;
 	@ManyToOne @JoinColumn(name = "parent_category_id") private CategoryEntity parentCategory;
 
-	@ToString.Exclude @OneToMany(mappedBy = "parentCategory", fetch = FetchType.EAGER) private List<CategoryEntity> subCategories;
-	@ToString.Exclude @OneToMany(mappedBy = "category") private List<ProductEntity> products;
+	@Exclude @OneToMany(mappedBy = "parentCategory", fetch = FetchType.EAGER) private List<CategoryEntity> subCategories;
+	@Exclude @OneToMany(mappedBy = "category") private List<ProductEntity> products;
 
 }

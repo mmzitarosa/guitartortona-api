@@ -1,86 +1,91 @@
 package it.mmzitarosa.guitartortona.controller;
 
-import it.mmzitarosa.guitartortona.dto.purchase.PurchaseItemDTO;
-import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.*;
+import it.mmzitarosa.guitartortona.dto.purchase.ProductPurchaseItemDTO;
+import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceDetailDTO;
+import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceInput;
+import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceListDTO;
+import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.ProductIncomingInvoiceInput;
 import it.mmzitarosa.guitartortona.service.IncomingInvoiceService;
 import it.mmzitarosa.guitartortona.service.PurchaseItemService;
-import it.mmzitarosa.guitartortona.utils.Constant.Status;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.SortDefault;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@RestController
-@RequestMapping("/api/v1")
+@RequiredArgsConstructor
+@RestController @RequestMapping("/api/v1")
 public class IncomingInvoiceController {
 
-	/* == CONSTANTS == */
 	private final IncomingInvoiceService service;
 	private final PurchaseItemService purchaseItemService;
 
-	/* == CONSTRUCTOR == */
-	public IncomingInvoiceController(IncomingInvoiceService incomingInvoiceService, PurchaseItemService purchaseItemService) {
-		this.service = incomingInvoiceService;
-		this.purchaseItemService = purchaseItemService;
-	}
-
 	/* == CREATE == */
-	@PostMapping("/incomingInvoice") public IncomingInvoiceDTO createIncomingInvoice(@Valid @RequestBody CreateIncomingInvoiceDTO request) {
-		return service.createIncomingInvoice(request);
+	@PostMapping("/incomingInvoice")
+	public ResponseEntity<IncomingInvoiceDetailDTO> createIncomingInvoice(@Valid @RequestBody IncomingInvoiceInput request) {
+		return ResponseEntity.ok(service.createIncomingInvoice(request));
 	}
 
 	/* == READ == */
-	@GetMapping("/incomingInvoices") public List<IncomingInvoiceLightDTO> readIncomingInvoices(@SortDefault(sort = {"date", "supplier", "id"}, direction = Sort.Direction.DESC) Sort sort) {
-		return service.readIncomingInvoices(false, sort);
+	@GetMapping("/incomingInvoices")
+	public ResponseEntity<List<IncomingInvoiceListDTO>> getAllIncomingInvoices(@SortDefault(sort = {"date", "supplier", "id"}, direction = Sort.Direction.DESC) Sort sort) {
+		return ResponseEntity.ok(service.getAllIncomingInvoices(false, sort));
 	}
 
 	@GetMapping("/archive/incomingInvoices")
-	public List<IncomingInvoiceLightDTO> readArchivedIncomingInvoices(@SortDefault(sort = {"archived_date"}, direction = Sort.Direction.DESC) Sort sort) {
-		return service.readIncomingInvoices(true, sort);
+	public ResponseEntity<List<IncomingInvoiceListDTO>> getArchivedIncomingInvoices(@SortDefault(sort = {"archivedDate"}, direction = Sort.Direction.DESC) Sort sort) {
+		return ResponseEntity.ok(service.getAllIncomingInvoices(true, sort));
 	}
 
 	@GetMapping("/incomingInvoice/{id}")
-	public IncomingInvoiceProductsDTO readIncomingInvoice(@PathVariable long id) {
-		return service.readIncomingInvoice(id, Status.DRAFT, Status.COMPLETED);
+	public ResponseEntity<IncomingInvoiceDetailDTO> getIncomingInvoiceDetail(@PathVariable long id) {
+		return ResponseEntity.ok(service.getIncomingInvoiceDetail(id));
 	}
 
 	/* == UPDATE **/
 	@PutMapping("/incomingInvoice/{id}")
-	public IncomingInvoiceDTO updateIncomingInvoice(@PathVariable long id, @Valid @RequestBody CreateIncomingInvoiceDTO request) {
-		return service.updateIncomingInvoice(id, request);
+	public ResponseEntity<IncomingInvoiceDetailDTO> updateIncomingInvoice(@PathVariable long id, @Valid @RequestBody IncomingInvoiceInput request) {
+		return ResponseEntity.ok(service.updateIncomingInvoice(id, request));
 	}
 
 	@PatchMapping("/incomingInvoice/{id}/complete")
-	public void completeIncomingInvoice(@PathVariable long id) {
-		service.completeIncomingInvoice(id);
+	public ResponseEntity<IncomingInvoiceDetailDTO> completeIncocompleteIncomingInvoicemingInvoice(@PathVariable long id) {
+		return ResponseEntity.ok(service.completeIncomingInvoice(id));
+	}
+
+	@PatchMapping("/incomingInvoice/{id}/restore")
+	public ResponseEntity<IncomingInvoiceDetailDTO> restoreIncomingInvoice(@PathVariable long id) {
+		return ResponseEntity.ok(service.restoreIncomingInvoice(id));
 	}
 
 	/* == DELETE == */
 	@DeleteMapping("/incomingInvoice/{id}")
-	public void deleteIncomingInvoice(@PathVariable long id) {
+	public ResponseEntity<Void> deleteIncomingInvoice(@PathVariable long id) {
 		service.deleteIncomingInvoice(id);
+		return ResponseEntity.noContent().build();
 	}
 
 	/* == OTHERS == */
 	/* == (CREATE) ADD PRODUCT TO INCOMING INVOICE == */
 	@PostMapping("/incomingInvoice/{id}/product")
-	public PurchaseItemDTO addIncomingInvoiceProduct(@PathVariable long id, @Valid @RequestBody AddIncomingInvoiceProductDTO request) {
-		return purchaseItemService.addIncomingInvoiceProduct(id, request);
+	public ResponseEntity<ProductPurchaseItemDTO> addProductToIncomingInvoice(@PathVariable long id, @Valid @RequestBody ProductIncomingInvoiceInput request) {
+		return ResponseEntity.ok(purchaseItemService.addProductToIncomingInvoice(id, request));
 	}
 
 	/* == (UPDATE) UPDATE INCOMING INVOICE PRODUCT == */
-	@PutMapping("/incomingInvoice/{invoiceId}/product/{id}")
-	public PurchaseItemDTO updateIncomingInvoiceProduct(@PathVariable long id, @Valid @RequestBody UpdateIncomingInvoiceProductDTO request) {
-		return purchaseItemService.updateIncomingInvoiceProduct(id, request);
+	@PutMapping("/incomingInvoice/{id}/product/{purchaseItemId}")
+	public ResponseEntity<ProductPurchaseItemDTO> updateProductInIncomingInvoice(@PathVariable long id, @PathVariable long purchaseItemId, @Valid @RequestBody ProductIncomingInvoiceInput request) {
+		return ResponseEntity.ok(purchaseItemService.updateProductInIncomingInvoice(id, purchaseItemId, request));
 	}
 
-	/* == (UPDATE) UPDATE INCOMING INVOICE PRODUCT == */
-	@DeleteMapping("/incomingInvoice/{invoiceId}/product/{id}")
-	public void deleteIncomingInvoiceProduct(@PathVariable long id) {
-		purchaseItemService.deletePurchaseItem(id);
+	/* == (DELETE) DELETE INCOMING INVOICE PRODUCT == */
+	@DeleteMapping("/incomingInvoice/{id}/product/{purchaseItemId}")
+	public ResponseEntity<Void> deleteProductFromIncomingInvoice(@PathVariable long id, @PathVariable long purchaseItemId) {
+		purchaseItemService.deleteProductFromIncomingInvoice(id, purchaseItemId);
+		return ResponseEntity.noContent().build();
 	}
-
 
 }

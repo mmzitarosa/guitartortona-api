@@ -6,12 +6,13 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
-@Entity @Getter @Setter
-@Table(name = "used_receipt") @ToString(callSuper = true)
+@Entity @Table(name = "used_receipt") @Data
+@ToString(callSuper = true)
+@EqualsAndHashCode(callSuper = true)
 public class UsedReceiptEntity extends PurchaseEntity {
 
 	private Integer number;

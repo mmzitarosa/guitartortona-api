@@ -1,44 +1,46 @@
 package it.mmzitarosa.guitartortona.service;
 
-import it.mmzitarosa.guitartortona.dto.BrandDTO;
+import it.mmzitarosa.guitartortona.dto.brand.BrandDTO;
+import it.mmzitarosa.guitartortona.dto.brand.BrandInput;
 import it.mmzitarosa.guitartortona.entity.BrandEntity;
-import it.mmzitarosa.guitartortona.mapper.BrandMapper;
 import it.mmzitarosa.guitartortona.repository.BrandRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-@Service public class BrandService {
+@RequiredArgsConstructor
+@Service @Transactional(readOnly = true)
+public class BrandService {
 
-	/* == CONSTANTS == */
 	private final BrandRepository repository;
-	private final BrandMapper mapper;
 
-	/* == CONSTRUCTOR == */
-	public BrandService(BrandRepository repository, BrandMapper mapper) {
-		this.repository = repository;
-		this.mapper = mapper;
+	/**
+	 * GET /brands
+	 */
+	public List<BrandDTO> getAllBrands() {
+		return repository.findAll().stream()
+				.map(BrandDTO::of)
+				.toList();
 	}
 
-	/* == PUBLIC METHODS == */
-	public List<BrandDTO> readBrands() {
-		return mapper.toDto(repository.findAll());
-	}
-
-	/* == PACKAGE METHODS == */
-	BrandEntity getOrInsertBrand(Long brandId, String brandName) {
-		// Se ho l'id del fornitore, lo recupero da DB
-		// Altrimenti cerco fornitore per nome (evito duplicati) ed eventualmente, se non esistente, lo credo
-		BrandEntity brand;
-		if (brandId != null) {
-			brand = repository.findById(brandId).orElseThrow(() -> new IllegalArgumentException("Brand not found"));
-		} else if (brandName != null && !brandName.isEmpty()) {
-			brand = repository.findByNameIgnoreCase(brandName).orElseGet(() -> repository.save(new BrandEntity(brandName)));
-		} else {
-			throw new IllegalArgumentException("Brand id or name must be provided");
+	/**
+	 * Helper: Trova o crea brand
+	 */
+	@Transactional protected BrandEntity findOrCreateBrand(BrandInput brand) {
+		if (brand.id() != null) {
+			return repository.findById(brand.id())
+					.orElseThrow(() -> new RuntimeException("Brand not found: " + brand.id()));
 		}
 
-		return brand;
+		// Cerca per nome
+		return repository.findByNameIgnoreCase(brand.name())
+				.orElseGet(() -> {
+					BrandEntity newBrand = new BrandEntity();
+					newBrand.setName(brand.name());
+					return repository.save(newBrand);
+				});
 	}
 
 }

@@ -1,7 +1,8 @@
 package it.mmzitarosa.guitartortona.dto.ledger;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import it.mmzitarosa.guitartortona.dto.BankDTO;
+import it.mmzitarosa.guitartortona.dto.bank.BankDTO;
+import it.mmzitarosa.guitartortona.entity.LedgerEntryEntity;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -26,5 +27,23 @@ import static it.mmzitarosa.guitartortona.utils.Constant.*;
 	private MovementType movementType;		// Entrata/Uscita
 	private Double amount;					// Importo in entrata/uscita da banca/cassa
 	private String notes;					// Eventuali note
+
+	public static LedgerEntryDTO of(LedgerEntryEntity ledgerEntry) {
+		LedgerEntryDTO dto = new LedgerEntryDTO();
+		dto.setId(ledgerEntry.getId());
+		dto.setDate(ledgerEntry.getDate());
+		dto.setInvoiceNumber(ledgerEntry.getInvoiceNumber());
+		dto.setInvoiceDate(ledgerEntry.getInvoiceDate());
+		dto.setDescription(ledgerEntry.getDescription());
+		dto.setReason(ledgerEntry.getReason());
+		dto.setPaymentMethod(ledgerEntry.getPaymentMethod());
+		dto.setBank(ledgerEntry.getBank() != null ? BankDTO.of(ledgerEntry.getBank()) : null);
+		dto.setPaymentType(ledgerEntry.getPaymentType());
+		dto.setReceiptNumber(ledgerEntry.getReceiptNumber());
+		dto.setMovementType(ledgerEntry.getMovementType());
+		dto.setAmount(ledgerEntry.getAmount());
+		dto.setNotes(ledgerEntry.getNotes());
+		return dto;
+	}
 
 }

@@ -20,4 +20,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 		model.addAttribute("ledger", service.readLedger(from, to, "dd-MM-yyyy", sort));
 		return "ledger";
 	}
+
+	@GetMapping("/product/print") public String printLedger(@RequestParam String code, @RequestParam(required = false, defaultValue = "1") String quantity, Model model) {
+		model.addAttribute("quantity", quantity);
+		model.addAttribute("product", service.getProduct(code));
+		return "label";
+	}
+
+
 }

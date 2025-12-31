@@ -1,6 +1,6 @@
 package it.mmzitarosa.guitartortona.specification;
 
-import it.mmzitarosa.guitartortona.entity.view.ProductStockView;
+import it.mmzitarosa.guitartortona.entity.ProductEntity;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -9,7 +9,7 @@ import java.util.List;
 
 public class ProductSpecification {
 
-	public static Specification<ProductStockView> withSearch(String search) {
+	public static Specification<ProductEntity> withSearch(String search) {
 		return (root, query, cb) -> {
 			if (search == null || search.isBlank()) {
 				return cb.conjunction();
@@ -32,8 +32,6 @@ public class ProductSpecification {
 				// Ogni token deve essere trovato in almeno UN campo
 				predicates.add(cb.or(orPredicates.toArray(new Predicate[0])));
 			}
-
-			predicates.add(root.get("archived").in(false));
 
 			// Tutti i token devono essere presenti
 			return cb.and(predicates.toArray(new Predicate[0]));

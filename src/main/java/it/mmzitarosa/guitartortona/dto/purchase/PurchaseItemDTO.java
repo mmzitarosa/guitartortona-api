@@ -1,15 +1,21 @@
 package it.mmzitarosa.guitartortona.dto.purchase;
 
-import it.mmzitarosa.guitartortona.dto.product.ProductDTO;
-import lombok.Getter;
-import lombok.Setter;
+import it.mmzitarosa.guitartortona.entity.PurchaseItemEntity;
 
-@Getter @Setter public class PurchaseItemDTO {
-
-	private Long id;
-	private ProductDTO product;		// Prodotto
-	private Integer quantity;		// Quantità del prodotto
-	private Double vat;				// IVA da applicare al costo
-	private Double purchasePrice;	// Costo IVA esclusa
-
+public record PurchaseItemDTO(
+		Long id,
+		PurchaseSummaryDTO purchase,
+		Integer quantity,
+		Double vat,
+		Double purchasePrice
+) {
+	public static PurchaseItemDTO of(PurchaseItemEntity entity) {
+		return new PurchaseItemDTO(
+				entity.getId(),
+				PurchaseSummaryDTO.of(entity.getPurchase()),
+				entity.getQuantity(),
+				entity.getVat(),
+				entity.getPurchasePrice()
+		);
+	}
 }

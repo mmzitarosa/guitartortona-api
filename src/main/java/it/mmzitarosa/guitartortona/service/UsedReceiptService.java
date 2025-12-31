@@ -1,35 +1,21 @@
 package it.mmzitarosa.guitartortona.service;
 
-import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.CreateUsedReceiptDTO;
-import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptDTO;
-import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptLightDTO;
-import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptProductsDTO;
-import it.mmzitarosa.guitartortona.entity.PurchaseItemEntity;
 import it.mmzitarosa.guitartortona.entity.UsedReceiptEntity;
-import it.mmzitarosa.guitartortona.mapper.UsedReceiptMapper;
 import it.mmzitarosa.guitartortona.repository.UsedReceiptRepository;
-import it.mmzitarosa.guitartortona.utils.Constant.Status;
-import org.springframework.data.domain.Sort;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
-@Service public class UsedReceiptService {
+@RequiredArgsConstructor
+@Service @Transactional
+public class UsedReceiptService {
 
 	/* == CONSTANTS == */
 	private final UsedReceiptRepository repository;
-	private final UsedReceiptMapper mapper;
 	private final ProductService productService;
 
-	/* == CONSTRUCTOR == */
-	public UsedReceiptService(UsedReceiptRepository repository, UsedReceiptMapper mapper, ProductService productService) {
-		this.repository = repository;
-		this.mapper = mapper;
-		this.productService = productService;
-	}
-
 	/* == PUBLIC METHODS == */
-	public UsedReceiptDTO createUsedReceipt(CreateUsedReceiptDTO dto) {
+/*	public UsedReceiptDTO createUsedReceipt(CreateUsedReceiptDTO dto) {
 		// Converto il DTO in oggetto
 		UsedReceiptEntity entity = mapper.toEntity(new UsedReceiptEntity(), dto);
 		// Essendo primo inserimento la salvo come bozza
@@ -62,13 +48,6 @@ import java.util.List;
 		UsedReceiptEntity usedReceipt = getUsedReceipt(id);
 		// Aggiorno lo stato della ricevuta
 		usedReceipt.setStatus(Status.COMPLETED);
-		// Per ogni item aggiorno lo stato della relazione e prodotto associato
-		for (PurchaseItemEntity item : usedReceipt.getItems()) {
-			// Aggiorno lo stato della relazione
-			item.setStatus(Status.COMPLETED);
-			// Aggiorno lo stato del prodotto, potrebbe già essere completed
-			item.getProduct().setStatus(Status.COMPLETED);
-		}
 		// Salvo il tutto su DB
 		repository.save(usedReceipt);
 	}
@@ -88,13 +67,6 @@ import java.util.List;
 		} else {
 			// Aggiorno lo stato della ricevuta
 			usedReceipt.setArchived(true);
-			// Per ogni item aggiorno lo stato della relazione
-			for (PurchaseItemEntity item : usedReceipt.getItems()) {
-				// Aggiorno lo stato della relazione
-				// A differenza delle fatture, qui devo aggiornare anche il prodotto
-				item.setArchived(true);
-				item.getProduct().setArchived(true);
-			}
 			// Salvo il tutto su DB
 			repository.save(usedReceipt);
 		}
