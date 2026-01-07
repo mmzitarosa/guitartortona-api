@@ -10,6 +10,7 @@ public record SaleDTO(
 		@JsonFormat(pattern = "dd/MM/yyyy") LocalDate date,
 		Integer quantity,
 		Double vat,
+		String receiptNumber,
 		Double salePrice
 ) {
 	public static SaleDTO of(SaleEntity entity) {
@@ -18,6 +19,7 @@ public record SaleDTO(
 				entity.getDate(),
 				entity.getQuantity(),
 				entity.getVat(),
+				entity.getReceiptNumber(),
 				entity.getSalePrice()
 		);
 	}

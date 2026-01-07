@@ -11,7 +11,8 @@ public record ProductListDTO(
 		ProductCondition condition,
 		Double price,
 		Integer stock,
-		Integer stockPending
+		Integer stockPending,
+		boolean available
 ) {
 	public static ProductListDTO of(ProductEntity entity) {
 		return new ProductListDTO(
@@ -22,7 +23,8 @@ public record ProductListDTO(
 				entity.getCondition(),
 				entity.getPrice(),
 				entity.getStock(),
-				entity.getStockPending()
+				entity.getStockPending(),
+				entity.getStock() > 0 || entity.getStockPending() > 0
 		);
 	}
 }

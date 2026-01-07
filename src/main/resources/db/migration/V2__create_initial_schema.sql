@@ -138,6 +138,7 @@ CREATE TABLE `sale` (
   `vat` decimal(5,2) DEFAULT NULL,
   `sale_price` decimal(12,2) DEFAULT NULL,
   `quantity` smallint(4) NOT NULL,
+  `receipt_number` varchar(5) DEFAULT NULL,
   `notes` varchar(255) DEFAULT NULL,
   `created_date` datetime NOT NULL,
   `updated_date` datetime NOT NULL,

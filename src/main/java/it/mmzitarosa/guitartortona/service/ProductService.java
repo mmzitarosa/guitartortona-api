@@ -29,7 +29,7 @@ public class ProductService {
 	 * GET /products
 	 */
 	@Transactional(readOnly = true) public List<ProductListDTO> getAllProducts(Sort sort) {
-		return repository.findAllByStockGreaterThanOrStockPendingGreaterThan(0, 0, sort).stream()
+		return repository.findAll(sort).stream()
 				.map(ProductListDTO::of)
 				.toList();
 	}

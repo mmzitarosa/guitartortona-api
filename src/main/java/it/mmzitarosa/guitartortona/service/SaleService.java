@@ -30,9 +30,10 @@ public class SaleService {
 		// Crea purchase
 		SaleEntity sale = new SaleEntity();
 		sale.setProduct(product);
+		sale.setDate(input.date());
+		sale.setQuantity(input.quantity());
 		sale.setVat(input.vat());
 		sale.setSalePrice(input.salePrice());
-		sale.setQuantity(input.quantity());
 		sale.setNotes(input.notes());
 		repository.save(sale);
 

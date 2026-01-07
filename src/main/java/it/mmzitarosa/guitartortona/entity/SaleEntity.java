@@ -17,6 +17,7 @@ public class SaleEntity extends DateEntity {
 	private Double vat;
 	@Column(name = "sale_price") private Double salePrice;
 	private Integer quantity;
+	@Column(name = "receipt_number") private String receiptNumber;
 	private String notes;
 
 	@ManyToOne @JoinColumn(name = "product_id") private ProductEntity product;

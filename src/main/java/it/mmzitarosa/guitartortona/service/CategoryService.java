@@ -27,9 +27,9 @@ public class CategoryService {
 	 * Load categories into memory at startup
 	 */
 	@PostConstruct protected void loadCategories() {
-		List<CategoryEntity> categories = repository.findAll().stream().filter(c -> c.getParentCategory() == null).toList();
+		List<CategoryEntity> categories = repository.findAll();
 		categoriesMap = categories.stream().collect(Collectors.toMap(CategoryEntity::getId, Function.identity()));
-		this.categories = categories.stream().map(CategoryDTO::of).toList();
+		this.categories = categories.stream().filter(c -> c.getParentCategory() == null).map(CategoryDTO::of).toList();
 	}
 
 	/**
