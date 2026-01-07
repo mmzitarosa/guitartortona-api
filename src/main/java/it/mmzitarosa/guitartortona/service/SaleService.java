@@ -5,6 +5,7 @@ import it.mmzitarosa.guitartortona.dto.sale.SaleInput;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
 import it.mmzitarosa.guitartortona.entity.SaleEntity;
 import it.mmzitarosa.guitartortona.repository.SaleRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,8 @@ public class SaleService {
 
 	private final SaleRepository repository;
 	private final ProductService productService;
+
+	private final EntityManager entityManager;
 
 	/**
 	 * POST /product/{id}/sale
@@ -36,6 +39,9 @@ public class SaleService {
 		sale.setSalePrice(input.salePrice());
 		sale.setNotes(input.notes());
 		repository.save(sale);
+
+		entityManager.flush();
+		entityManager.clear();
 
 		return productService.getProductDetail(productId);
 	}
