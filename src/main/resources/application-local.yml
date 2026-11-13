@@ -6,3 +6,10 @@ spring:
     driver-class-name: org.mariadb.jdbc.Driver
   jpa:
     show-sql: true
+
+app:
+  security:
+    # Sviluppo locale: nessun login. Per provare l'auth reale metti true e usa un token Keycloak.
+    enabled: false
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:3000,http://localhost:8080
