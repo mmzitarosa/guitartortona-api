@@ -1,34 +1,14 @@
 # ============================================================================
-# Multi-Stage Dockerfile for Spring Boot Application
-# Supports: linux/amd64, linux/arm64
+# Dockerfile for Spring Boot Application
+# Supports: linux/amd64
 # ============================================================================
 
-# ============================================================================
-# Stage 1: Build Stage
-# ============================================================================
-FROM maven:3.9-amazoncorretto-21 AS builder
-
-WORKDIR /build
-
-# Copy Maven configuration first (better layer caching)
-COPY pom.xml .
-COPY .mvn .mvn
-COPY mvnw .
-
-# Download dependencies (cached layer if pom.xml doesn't change)
-RUN mvn dependency:go-offline -B
-
-# Copy source code
-COPY src ./src
-
-# Build application
-RUN mvn clean package -DskipTests --batch-mode --no-transfer-progress && \
-    # Find the built JAR (excluding original)
-    mv target/*.jar target/app.jar 2>/dev/null || \
-    find target -name "*.jar" ! -name "*-original.jar" -exec mv {} target/app.jar \;
+# NOTE: il JAR NON viene ricompilato qui. Il Dockerfile impacchetta il JAR gia'
+# costruito e testato dalla pipeline (stesso binario della GitHub Release).
+# Build locale: ./mvnw clean package -DskipTests && docker build -t guitartortona-api .
 
 # ============================================================================
-# Stage 2: Runtime Stage
+# Runtime image
 # ============================================================================
 FROM amazoncorretto:21-alpine
 
@@ -70,8 +50,8 @@ USER appuser
 
 WORKDIR /app
 
-# Copy JAR from builder stage
-COPY --from=builder --chown=appuser:appuser /build/target/app.jar app.jar
+# Copy the pre-built JAR (target/ contains a single executable JAR)
+COPY --chown=appuser:appuser target/*.jar app.jar
 
 # Expose ports
 EXPOSE ${SERVER_PORT} ${MANAGEMENT_PORT}
