@@ -57,6 +57,11 @@ class SecurityConfigTest {
 		mvc.perform(get("/api/v1/ledger").param("year", "2025")).andExpect(status().isUnauthorized());
 	}
 
+	@Test void staticResourcesArePublic() throws Exception {
+		mvc.perform(get("/fonts/Code39.ttf")).andExpect(status().isNotFound());
+		mvc.perform(get("/images/logo90.png")).andExpect(status().isNotFound());
+	}
+
 	@Test void viewerCanRead() throws Exception {
 		mvc.perform(get("/api/v1/ledger").param("year", "2025").with(withRole(Roles.VIEWER))).andExpect(status().isOk());
 	}

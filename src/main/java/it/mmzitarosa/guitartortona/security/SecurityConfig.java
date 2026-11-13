@@ -57,6 +57,7 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers(onManagementPort()).permitAll()
 						.requestMatchers(EndpointRequest.to(HealthEndpoint.class)).permitAll()
+						.requestMatchers(HttpMethod.GET, "/fonts/**", "/images/**").permitAll()
 						.requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole(Roles.ADMIN)
 						.requestMatchers(HttpMethod.GET, "/api/v1/**").hasAnyRole(Roles.VIEWER, Roles.USER, Roles.ADMIN)
 						.requestMatchers(HttpMethod.DELETE, "/api/v1/**").hasRole(Roles.ADMIN)

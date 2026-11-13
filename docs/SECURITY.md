@@ -12,6 +12,7 @@ L'API è un **resource server OAuth2**: accetta solo `Authorization: Bearer <JWT
 | `DELETE /api/v1/**` | `app-admin` |
 | `actuator` su porta di management separata (8081, non esposta da Ingress/Service pubblico) | libero (probe, Prometheus) |
 | `actuator` sulla porta API | solo `health`; il resto `app-admin` |
+| `/fonts/**`, `/images/**` (GET) | pubblici: servono alle pagine di stampa (font e logo) |
 | qualsiasi altro percorso | negato |
 
 I ruoli vengono letti dal claim `roles` (mapper `realm-roles` del client `guitartortona-web`) oppure da `realm_access.roles`.
