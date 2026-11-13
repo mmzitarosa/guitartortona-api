@@ -8,6 +8,13 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-staging
+  cancel-in-progress: false
+
 env:
   DEPLOY_REPO: mmzitarosa/guitartortona-api-deploy
 
@@ -26,21 +33,20 @@ jobs:
 
       - name: Validate RC tag exists
         id: validate
+        env:
+          RC_TAG: ${{ inputs.rc_tag }}
         run: |
-          RC_TAG="${{ inputs.rc_tag }}"
-          
-          # Check if tag exists
+          # Formato rigido: impedisce anche injection tramite l'input
+          if [[ ! "$RC_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+$ ]]; then
+            echo "❌ Tag must be a release candidate (format: vX.Y.Z-rcN)"
+            exit 1
+          fi
+
           if ! git rev-parse "$RC_TAG" >/dev/null 2>&1; then
             echo "❌ Tag $RC_TAG does not exist"
             exit 1
           fi
-          
-          # Validate tag format (must be -rcN)
-          if [[ ! "$RC_TAG" =~ -rc[0-9]+$ ]]; then
-            echo "❌ Tag must be a release candidate (format: vX.Y.Z-rcN)"
-            exit 1
-          fi
-          
+
           echo "✅ Tag $RC_TAG is valid"
 
   # ============================================================================
@@ -50,6 +56,7 @@ jobs:
     name: Re-tag Docker Images
     needs: [validate]
     runs-on: ubuntu-latest
+    environment: staging
     permissions:
       packages: write
     steps:
@@ -61,25 +68,27 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull RC image
+        env:
+          RC_TAG: ${{ inputs.rc_tag }}
+          IMAGE: ghcr.io/${{ github.repository }}
         run: |
-          RC_TAG="${{ inputs.rc_tag }}"
-          docker pull ghcr.io/${{ github.repository }}:$RC_TAG
+          docker pull "$IMAGE:$RC_TAG"
 
       - name: Re-tag for staging
+        env:
+          RC_TAG: ${{ inputs.rc_tag }}
+          IMAGE: ghcr.io/${{ github.repository }}
         run: |
-          RC_TAG="${{ inputs.rc_tag }}"
-          
-          # Tag as staging
-          docker tag \
-            ghcr.io/${{ github.repository }}:$RC_TAG \
-            ghcr.io/${{ github.repository }}:staging
+          docker tag "$IMAGE:$RC_TAG" "$IMAGE:staging"
           
           echo "✅ Image re-tagged:"
           echo "  - staging"
 
       - name: Push staging images
-        run: |          
-          docker push ghcr.io/${{ github.repository }}:staging
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+        run: |
+          docker push "$IMAGE:staging"
           
           echo "✅ Image pushed to registry"
 
@@ -99,10 +108,10 @@ jobs:
           path: deploy-repo
 
       - name: Update staging kustomization
+        env:
+          RC_TAG: ${{ inputs.rc_tag }}
         run: |
           cd deploy-repo/overlays/staging
-          
-          RC_TAG="${{ inputs.rc_tag }}"
           
           # Update the newTag in kustomization.yaml
           sed -i "s/newTag: .*/newTag: $RC_TAG/" kustomization.yaml
@@ -111,10 +120,12 @@ jobs:
           cat kustomization.yaml | grep -A 2 "images:"
 
       - name: Commit and push changes
+        env:
+          RC_TAG: ${{ inputs.rc_tag }}
+          SOURCE_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cd deploy-repo
-          
-          RC_TAG="${{ inputs.rc_tag }}"
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -127,9 +138,10 @@ jobs:
             git commit -m "chore: promote staging to $RC_TAG
           
             Promoted from RC: $RC_TAG
-            Source: ${{ github.repository }}
-            Workflow: ${{ github.run_id }}"
-          
+            Source: $SOURCE_REPO
+            Workflow: $RUN_ID"
+
+            git pull --rebase
             git push
             echo "✅ Deployment configuration updated to $RC_TAG"
           fi
@@ -144,13 +156,15 @@ jobs:
     if: success()
     steps:
       - name: Staging promotion summary
+        env:
+          RC_TAG: ${{ inputs.rc_tag }}
         run: |
           echo "## 🔄 Staging Re-deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**RC Version:** \`${{ inputs.rc_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**RC Version:** \`$RC_TAG\`" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ✅ Re-deployed to Staging" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
           echo "- [Staging API](https://api-staging.guitar.lab)" >> $GITHUB_STEP_SUMMARY
           echo "- [ArgoCD](https://argocd.guitar.lab)" >> $GITHUB_STEP_SUMMARY
-          echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ inputs.rc_tag }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/$RC_TAG)" >> $GITHUB_STEP_SUMMARY

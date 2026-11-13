@@ -6,6 +6,14 @@ on:
       - develop
       - hotfix
 
+permissions:
+  contents: read
+
+# Una sola pipeline per branch alla volta: evita tag RC duplicati e push concorrenti sul repo deploy
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   JAVA_VERSION: '21'
   MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.httpconnectionManager.ttlSeconds=120
@@ -45,10 +53,10 @@ jobs:
 
       - name: Analyze commit message
         id: check
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          BRANCH="${{ github.ref_name }}"
-          
           echo "Branch: $BRANCH"
           echo "Commit: $COMMIT_MSG"
           
@@ -102,10 +110,10 @@ jobs:
 
       - name: Calculate new version
         id: calc
+        env:
+          COMMIT_TYPE: ${{ needs.validate.outputs.commit_type }}
+          SHOULD_PROCEED: ${{ needs.validate.outputs.should_proceed }}
         run: |
-          COMMIT_TYPE="${{ needs.validate.outputs.commit_type }}"
-          BRANCH="${{ github.ref_name }}"
-          
           # Get latest production version (tags without -rc)
           LATEST_PROD=$(git tag -l "v*" | grep -v "\-rc" | sort -V | tail -n1)
           
@@ -138,9 +146,11 @@ jobs:
           RC_NUM=$((RC_COUNT + 1))
           NEW_TAG="${NEW_VERSION}-rc${RC_NUM}"
           
-          if [ "${{ needs.validate.outputs.should_proceed }}" == "true" ]; then
+          # Solo i commit che NON sono release (build di sola verifica) ricevono -SNAPSHOT:
+          # i tag RC promuovibili devono terminare con -rcN
+          if [ "$SHOULD_PROCEED" != "true" ]; then
             NEW_TAG="${NEW_TAG}-SNAPSHOT"
-          fi          
+          fi
           
           echo "📦 New version: $NEW_TAG"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
@@ -165,8 +175,10 @@ jobs:
           cache: 'maven'
 
       - name: Set Maven version
+        env:
+          NEW_TAG: ${{ needs.version.outputs.new_tag }}
         run: |
-          ./mvnw versions:set -DnewVersion=${{ needs.version.outputs.new_tag }} -DgenerateBackupPoms=false
+          ./mvnw versions:set -DnewVersion="$NEW_TAG" -DgenerateBackupPoms=false
 
       - name: Run tests
         run: ./mvnw test --batch-mode --no-transfer-progress
@@ -197,9 +209,11 @@ jobs:
           cache: 'maven'
 
       - name: Set Maven version
+        env:
+          NEW_TAG: ${{ needs.version.outputs.new_tag }}
         run: |
-          ./mvnw versions:set -DnewVersion=${{ needs.version.outputs.new_tag }} -DgenerateBackupPoms=false
-          echo "Updated pom.xml version to ${{ needs.version.outputs.new_tag }}"
+          ./mvnw versions:set -DnewVersion="$NEW_TAG" -DgenerateBackupPoms=false
+          echo "Updated pom.xml version to $NEW_TAG"
 
       - name: Build with Maven
         run: |
@@ -237,9 +251,6 @@ jobs:
           name: application-jar
           path: target/
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -263,7 +274,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -290,10 +301,10 @@ jobs:
           path: deploy-repo
 
       - name: Update staging kustomization
+        env:
+          NEW_TAG: ${{ needs.version.outputs.new_tag }}
         run: |
           cd deploy-repo/overlays/staging
-          
-          NEW_TAG="${{ needs.version.outputs.new_tag }}"
           
           # Update the newTag in kustomization.yaml
           sed -i "s/newTag: .*/newTag: $NEW_TAG/" kustomization.yaml
@@ -302,10 +313,14 @@ jobs:
           cat kustomization.yaml | grep -A 2 "images:"
 
       - name: Commit and push changes
+        env:
+          NEW_TAG: ${{ needs.version.outputs.new_tag }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          SOURCE_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           cd deploy-repo
-          
-          NEW_TAG="${{ needs.version.outputs.new_tag }}"
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -317,11 +332,12 @@ jobs:
             git add overlays/staging/kustomization.yaml
             git commit -m "chore: update staging to $NEW_TAG
 
-            Promoted from: ${{ github.ref_name }}
-            Source: ${{ github.repository }}
-            Commit: ${{ github.sha }}
-            Workflow: ${{ github.run_id }}"
+            Promoted from: $SOURCE_BRANCH
+            Source: $SOURCE_REPO
+            Commit: $SOURCE_SHA
+            Workflow: $RUN_ID"
 
+            git pull --rebase
             git push
             echo "✅ Deployment configuration updated to $NEW_TAG"
           fi
@@ -349,7 +365,7 @@ jobs:
           path: artifacts/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.new_tag }}
           target_commitish: ${{ github.sha }}
@@ -374,7 +390,6 @@ jobs:
             
             - **Staging API:** https://api-staging.guitar.lab
             - **ArgoCD:** https://argocd.guitar.lab
-            - **Grafana:** https://grafana.guitar.lab
             
             ### 📋 Artifacts
             - Application JAR (built with Maven)
@@ -409,7 +424,6 @@ jobs:
           echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
           echo "- [Staging API](https://api-staging.guitar.lab)" >> $GITHUB_STEP_SUMMARY
           echo "- [ArgoCD](https://argocd.guitar.lab)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Grafana](https://grafana.guitar.lab)" >> $GITHUB_STEP_SUMMARY
           echo "- [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.version.outputs.new_tag }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📦 Docker Image" >> $GITHUB_STEP_SUMMARY
