@@ -163,6 +163,10 @@ jobs:
     name: Run Unit Tests
     needs: [ version ]
     runs-on: ubuntu-latest
+    # checks: write serve a publish-unit-test-result-action per pubblicare l'esito dei test
+    permissions:
+      contents: read
+      checks: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
