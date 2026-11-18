@@ -17,7 +17,7 @@ public record ProductSummaryDTO(
 				entity.getId(),
 				entity.getCode(),
 				entity.getInternalCode(),
-				entity.getBrand().getId(),
+				entity.getBrand() == null ? null : entity.getBrand().getId(),
 				entity.getCategory().getId(),
 				entity.getDescription(),
 				entity.getPrice(),

@@ -17,7 +17,7 @@ public record ProductListDTO(
 	public static ProductListDTO of(ProductEntity entity) {
 		return new ProductListDTO(
 				entity.getId(),
-				entity.getBrand().getId(),
+				entity.getBrand() == null ? null : entity.getBrand().getId(),
 				entity.getCategory().getId(),
 				entity.getDescription(),
 				entity.getCondition(),

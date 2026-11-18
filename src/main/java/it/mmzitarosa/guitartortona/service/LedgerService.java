@@ -1,5 +1,7 @@
 package it.mmzitarosa.guitartortona.service;
 
+import it.mmzitarosa.guitartortona.exception.NotFoundException;
+
 import it.mmzitarosa.guitartortona.dto.ledger.CreateLedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryLightDTO;
@@ -53,7 +55,7 @@ public class LedgerService {
 	}
 
 	public LedgerEntryDTO readLedgerEntry(long id) {
-		return LedgerEntryDTO.of(repository.findById(id).orElseThrow(() -> new IllegalArgumentException("LedgerEntry not found")));
+		return LedgerEntryDTO.of(repository.findById(id).orElseThrow(() -> new NotFoundException("LEDGER_ENTRY_NOT_FOUND", "LedgerEntry not found")));
 	}
 
 	public List<LedgerEntryLightDTO> readLedger(int year, boolean archived, Sort sort) {
@@ -61,7 +63,7 @@ public class LedgerService {
 	}
 
 	public LedgerEntryDTO updateLedgerEntry(long id, CreateLedgerEntryDTO input) {
-		LedgerEntryEntity ledgerEntry = repository.findById(id).orElseThrow(() -> new IllegalArgumentException("LedgerEntry not found"));
+		LedgerEntryEntity ledgerEntry = repository.findById(id).orElseThrow(() -> new NotFoundException("LEDGER_ENTRY_NOT_FOUND", "LedgerEntry not found"));
 
 		// Trova bank
 		BankEntity bank = input.getBankId()!= null ? bankService.getBank(input.getBankId()) : null;

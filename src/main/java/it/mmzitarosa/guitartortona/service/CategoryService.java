@@ -1,5 +1,7 @@
 package it.mmzitarosa.guitartortona.service;
 
+import it.mmzitarosa.guitartortona.exception.NotFoundException;
+
 import it.mmzitarosa.guitartortona.dto.category.CategoryDTO;
 import it.mmzitarosa.guitartortona.entity.CategoryEntity;
 import it.mmzitarosa.guitartortona.repository.CategoryRepository;
@@ -43,7 +45,7 @@ public class CategoryService {
 	 * Helper: Recupera category
 	 */
 	protected CategoryEntity getCategory(long id) {
-		return Optional.ofNullable(categoriesMap.get(id)).orElseThrow(() -> new RuntimeException("Category not found: " + id));
+		return Optional.ofNullable(categoriesMap.get(id)).orElseThrow(() -> new NotFoundException("CATEGORY_NOT_FOUND", "Category not found: " + id));
 	}
 
 }

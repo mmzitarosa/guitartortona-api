@@ -1,5 +1,7 @@
 package it.mmzitarosa.guitartortona.service;
 
+import it.mmzitarosa.guitartortona.exception.NotFoundException;
+
 import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.PrintableLedgerDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductPrintDTO;
@@ -73,7 +75,7 @@ public class PrintService {
 
 	@Transactional(readOnly = true) public ProductPrintDTO getProduct(String internalCode) {
 		ProductEntity product = productRepository.findByInternalCodeIgnoreCase(internalCode)
-				.orElseThrow(() -> new RuntimeException("Product not found: " + internalCode));
+				.orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + internalCode));
 		return ProductPrintDTO.of(product);
 	}
 

@@ -1,5 +1,7 @@
 package it.mmzitarosa.guitartortona.service;
 
+import it.mmzitarosa.guitartortona.exception.NotFoundException;
+
 import it.mmzitarosa.guitartortona.dto.supplier.SupplierDTO;
 import it.mmzitarosa.guitartortona.dto.supplier.SupplierInput;
 import it.mmzitarosa.guitartortona.entity.SupplierEntity;
@@ -31,7 +33,7 @@ public class SupplierService {
 	@Transactional protected SupplierEntity findOrCreateSupplier(SupplierInput supplier) {
 		if (supplier.id() != null) {
 			return repository.findById(supplier.id())
-					.orElseThrow(() -> new RuntimeException("Supplier not found: " + supplier.id()));
+					.orElseThrow(() -> new NotFoundException("SUPPLIER_NOT_FOUND", "Supplier not found: " + supplier.id()));
 		}
 
 		// Cerca per nome

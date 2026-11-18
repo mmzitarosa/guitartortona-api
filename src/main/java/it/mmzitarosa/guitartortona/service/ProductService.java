@@ -1,5 +1,7 @@
 package it.mmzitarosa.guitartortona.service;
 
+import it.mmzitarosa.guitartortona.exception.NotFoundException;
+
 import it.mmzitarosa.guitartortona.dto.product.ProductDetailDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductInput;
 import it.mmzitarosa.guitartortona.dto.product.ProductListDTO;
@@ -56,7 +58,7 @@ public class ProductService {
 	 */
 	@Transactional(readOnly = true) public ProductDetailDTO getProductDetailByCode(String code) {
 		ProductEntity product = repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(code, code)
-				.orElseThrow(() -> new RuntimeException("Product not found: " + code));
+				.orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + code));
 		return ProductDetailDTO.of(product);
 	}
 
@@ -77,22 +79,21 @@ public class ProductService {
 	 */
 	protected ProductEntity getProduct(long id) {
 		return repository.findById(id)
-				.orElseThrow(() -> new RuntimeException("Product not found: " + id));
+				.orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + id));
 	}
 
 	/**
-	 * Helper: Trova o crea product
+	 * Helper: Trova o crea product.
+	 * Se il prodotto esiste già, i suoi dati vengono aggiornati con quelli ricevuti.
 	 */
 	protected ProductEntity findOrCreateProduct(ProductInput input, ProductCondition condition) {
+		ProductEntity existing = null;
 		if (input.id() != null)
-			return getProduct(input.id());
+			existing = getProduct(input.id());
+		else if (input.code() != null)
+			existing = repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(input.code(), input.code()).orElse(null);
 
-		// Cerca per code
-		if (input.code() != null)
-			return repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(input.code(), input.code())
-					.orElseGet(() -> createNewProduct(input, condition));
-
-		return createNewProduct(input, condition);
+		return existing != null ? updateProduct(existing, input) : createNewProduct(input, condition);
 	}
 
 	/**
@@ -122,7 +123,10 @@ public class ProductService {
 		BrandEntity brand = brandService.findOrCreateBrand(input.brand());
 		CategoryEntity category = categoryService.getCategory(input.category().id());
 
-		product.setCode(input.code());
+		// Se il prodotto è stato trovato scansionando il codice interno, il codice prodotto non va sovrascritto
+		boolean codeIsInternalCode = input.code() != null && input.code().equalsIgnoreCase(product.getInternalCode());
+		if (!codeIsInternalCode)
+			product.setCode(input.code());
 		product.setBrand(brand);
 		product.setCategory(category);
 		product.setDescription(input.description());

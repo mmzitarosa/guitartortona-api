@@ -52,7 +52,7 @@ public class IncomingInvoiceController {
 	}
 
 	@PatchMapping("/incomingInvoice/{id}/complete")
-	public ResponseEntity<IncomingInvoiceDetailDTO> completeIncocompleteIncomingInvoicemingInvoice(@PathVariable long id) {
+	public ResponseEntity<IncomingInvoiceDetailDTO> completeIncomingInvoice(@PathVariable long id) {
 		return ResponseEntity.ok(service.completeIncomingInvoice(id));
 	}
 

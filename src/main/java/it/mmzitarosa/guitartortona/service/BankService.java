@@ -1,5 +1,7 @@
 package it.mmzitarosa.guitartortona.service;
 
+import it.mmzitarosa.guitartortona.exception.NotFoundException;
+
 import it.mmzitarosa.guitartortona.dto.bank.BankDTO;
 import it.mmzitarosa.guitartortona.entity.BankEntity;
 import it.mmzitarosa.guitartortona.repository.BankRepository;
@@ -43,6 +45,6 @@ public class BankService {
 	 * Helper: Recupera bank
 	 */
 	protected BankEntity getBank(long id) {
-		return Optional.ofNullable(banksMap.get(id)).orElseThrow(() -> new RuntimeException("Bank not found: " + id));
+		return Optional.ofNullable(banksMap.get(id)).orElseThrow(() -> new NotFoundException("BANK_NOT_FOUND", "Bank not found: " + id));
 	}
 }

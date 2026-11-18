@@ -12,7 +12,7 @@ public record ProductPrintDTO(
 		return new ProductPrintDTO(
 				entity.getInternalCode(),
 				entity.getBrand() == null ? null : entity.getBrand().getName(),
-				entity.getBrand() == null ? null : entity.getCategory().getName(),
+				entity.getCategory() == null ? null : entity.getCategory().getName(),
 				entity.getDescription()
 		);
 	}

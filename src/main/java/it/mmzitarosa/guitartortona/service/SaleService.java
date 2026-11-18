@@ -1,5 +1,7 @@
 package it.mmzitarosa.guitartortona.service;
 
+import it.mmzitarosa.guitartortona.exception.ConflictException;
+
 import it.mmzitarosa.guitartortona.dto.product.ProductDetailDTO;
 import it.mmzitarosa.guitartortona.dto.sale.SaleInput;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
@@ -27,7 +29,7 @@ public class SaleService {
 
 		// Verifica disponibilità prodotto
 		if (product.getStock() < input.quantity()) {
-			throw new RuntimeException("Product stock is not enough: " + product.getStock());
+			throw new ConflictException("PRODUCT_STOCK_NOT_ENOUGH", "Product stock is not enough: " + product.getStock());
 		}
 
 		// Crea purchase

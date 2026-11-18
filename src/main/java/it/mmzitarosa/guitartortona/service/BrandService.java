@@ -1,5 +1,7 @@
 package it.mmzitarosa.guitartortona.service;
 
+import it.mmzitarosa.guitartortona.exception.NotFoundException;
+
 import it.mmzitarosa.guitartortona.dto.brand.BrandDTO;
 import it.mmzitarosa.guitartortona.dto.brand.BrandInput;
 import it.mmzitarosa.guitartortona.entity.BrandEntity;
@@ -31,7 +33,7 @@ public class BrandService {
 	@Transactional protected BrandEntity findOrCreateBrand(BrandInput brand) {
 		if (brand.id() != null) {
 			return repository.findById(brand.id())
-					.orElseThrow(() -> new RuntimeException("Brand not found: " + brand.id()));
+					.orElseThrow(() -> new NotFoundException("BRAND_NOT_FOUND", "Brand not found: " + brand.id()));
 		}
 
 		// Cerca per nome

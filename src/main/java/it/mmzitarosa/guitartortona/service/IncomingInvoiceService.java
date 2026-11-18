@@ -1,5 +1,8 @@
 package it.mmzitarosa.guitartortona.service;
 
+import it.mmzitarosa.guitartortona.exception.NotFoundException;
+import it.mmzitarosa.guitartortona.exception.ConflictException;
+
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceDetailDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceInput;
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.IncomingInvoiceListDTO;
@@ -49,7 +52,7 @@ public class IncomingInvoiceService {
 
 		// Verifica univocità numero fattura per supplier
 		if (repository.existsBySupplierAndNumber(supplier, input.number())) {
-			throw new RuntimeException("Invoice number already exists for this supplier: " + input.number());
+			throw new ConflictException("INVOICE_NUMBER_ALREADY_EXISTS", "Invoice number already exists for this supplier: " + input.number());
 		}
 
 		// Crea purchase
@@ -78,7 +81,7 @@ public class IncomingInvoiceService {
 		// Verifica univocità numero fattura (escludi se stessa)
 		if (!incomingInvoice.getNumber().equals(input.number()) &&
 				repository.existsBySupplierAndNumber(supplier, input.number())) {
-			throw new RuntimeException("Invoice number already exists for this supplier: " + input.number());
+			throw new ConflictException("INVOICE_NUMBER_ALREADY_EXISTS", "Invoice number already exists for this supplier: " + input.number());
 		}
 
 		// Aggiorna invoice
@@ -98,6 +101,9 @@ public class IncomingInvoiceService {
 	 */
 	public IncomingInvoiceDetailDTO completeIncomingInvoice(Long id) {
 		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
+
+		if (incomingInvoice.isArchived())
+			throw new ConflictException("INVOICE_ARCHIVED", "Archived invoice cannot be completed: " + id);
 
 		if (!incomingInvoice.isCompleted()) {
 			// Completa purchase
@@ -139,11 +145,21 @@ public class IncomingInvoiceService {
 	}
 
 	/**
+	 * Helper: Recupera incomingInvoice modificabile (bozza e non archiviata)
+	 */
+	protected IncomingInvoiceEntity getEditableIncomingInvoice(long id) {
+		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
+		if (incomingInvoice.isArchived() || !incomingInvoice.isDraft())
+			throw new ConflictException("INVOICE_NOT_EDITABLE", "Invoice is not editable: " + id);
+		return incomingInvoice;
+	}
+
+	/**
 	 * Helper: Recupera incomingInvoice
 	 */
 	protected IncomingInvoiceEntity getIncomingInvoice(long id) {
 		return repository.findById(id)
-				.orElseThrow(() -> new RuntimeException("Invoice not found: " + id));
+				.orElseThrow(() -> new NotFoundException("INVOICE_NOT_FOUND", "Invoice not found: " + id));
 	}
 
 }

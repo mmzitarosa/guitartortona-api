@@ -10,6 +10,6 @@ public record ProductIncomingInvoiceInput(
 		@DecimalMin(value = "0.0", message = "VAT must be greater than or equal to zero") Double vat,
 		@DecimalMin(value = "0.0", inclusive = false, message = "Purchase price must be greater than zero") Double purchasePrice,
 		@NotNull(message = "Quantity is mandatory")
-		@Min(value = 1, message = "Quantity must be greater than or equal to zero") Integer quantity
+		@Min(value = 1, message = "Quantity must be greater than or equal to 1") Integer quantity
 ) {}
 

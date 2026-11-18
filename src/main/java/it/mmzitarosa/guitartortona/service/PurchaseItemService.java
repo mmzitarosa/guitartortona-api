@@ -1,5 +1,8 @@
 package it.mmzitarosa.guitartortona.service;
 
+import it.mmzitarosa.guitartortona.exception.NotFoundException;
+import it.mmzitarosa.guitartortona.exception.ConflictException;
+
 import it.mmzitarosa.guitartortona.dto.purchase.ProductPurchaseItemDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.incominginvoice.ProductIncomingInvoiceInput;
 import it.mmzitarosa.guitartortona.entity.IncomingInvoiceEntity;
@@ -27,7 +30,7 @@ public class PurchaseItemService {
 	 * POST /incomingInvoice/{id}/product
 	 */
 	public ProductPurchaseItemDTO addProductToIncomingInvoice(Long incomingInvoiceId, ProductIncomingInvoiceInput input) {
-		IncomingInvoiceEntity incomingInvoice = incomingInvoiceService.getIncomingInvoice(incomingInvoiceId);
+		IncomingInvoiceEntity incomingInvoice = incomingInvoiceService.getEditableIncomingInvoice(incomingInvoiceId);
 
 		// Trova o crea prodotto
 		ProductEntity product = productService.findOrCreateProduct(input.product(), ProductCondition.NEW);
@@ -35,7 +38,7 @@ public class PurchaseItemService {
 		// Verifica che non esista già questo prodotto nella fattura
 		if (repository.existsByPurchaseAndProduct(
 				incomingInvoiceId, product.getId())) {
-			throw new RuntimeException("Product already exists in this invoice");
+			throw new ConflictException("PRODUCT_ALREADY_IN_INVOICE", "Product already exists in this invoice");
 		}
 
 		// Crea purchase item
@@ -55,11 +58,12 @@ public class PurchaseItemService {
 	 * PUT /incomingInvoice/{id}/product/{productId}
 	 */
 	public ProductPurchaseItemDTO updateProductInIncomingInvoice(Long incomingInvoiceId, Long purchaseItemId, ProductIncomingInvoiceInput dto) {
+		incomingInvoiceService.getEditableIncomingInvoice(incomingInvoiceId);
 		PurchaseItemEntity item = getPurchaseItem(purchaseItemId);
 
 		// Verifica che l'item appartenga a questa fattura
 		if (!item.getPurchase().getId().equals(incomingInvoiceId)) {
-			throw new RuntimeException("Purchase item does not belong to this invoice");
+			throw new ConflictException("PURCHASE_ITEM_NOT_IN_INVOICE", "Purchase item does not belong to this invoice");
 		}
 
 		ProductEntity product = productService.updateProduct(item.getProduct(), dto.product());
@@ -77,11 +81,12 @@ public class PurchaseItemService {
 	 * DELETE /incomingInvoice/{id}/product/{productId}
 	 */
 	public void deleteProductFromIncomingInvoice(Long incomingInvoiceId, Long purchaseItemId) {
+		incomingInvoiceService.getEditableIncomingInvoice(incomingInvoiceId);
 		PurchaseItemEntity item = getPurchaseItem(purchaseItemId);
 
 		// Verifica che l'item appartenga a questa fattura
 		if (!item.getPurchase().getId().equals(incomingInvoiceId)) {
-			throw new RuntimeException("Purchase item does not belong to this invoice");
+			throw new ConflictException("PURCHASE_ITEM_NOT_IN_INVOICE", "Purchase item does not belong to this invoice");
 		}
 
 		repository.deleteById(purchaseItemId);
@@ -91,7 +96,7 @@ public class PurchaseItemService {
 	 * Helper: Recupera purchaseItem
 	 */
 	protected PurchaseItemEntity getPurchaseItem(long id) {
-		return repository.findById(id).orElseThrow(() -> new RuntimeException("Purchase item not found: " + id));
+		return repository.findById(id).orElseThrow(() -> new NotFoundException("PURCHASE_ITEM_NOT_FOUND", "Purchase item not found: " + id));
 	}
 
 }

@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 		return "ledger";
 	}
 
-	@GetMapping("/product/print") public String printLedger(@RequestParam String code, @RequestParam(required = false, defaultValue = "1") String quantity, Model model) {
+	@GetMapping("/product/print") public String printLabel(@RequestParam String code, @RequestParam(required = false, defaultValue = "1") String quantity, Model model) {
 		model.addAttribute("quantity", quantity);
 		model.addAttribute("product", service.getProduct(code));
 		return "label";
