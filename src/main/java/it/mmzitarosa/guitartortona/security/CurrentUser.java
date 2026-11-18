@@ -18,4 +18,11 @@ public class CurrentUser {
 		return auth != null && auth.getAuthorities().stream()
 				.anyMatch(a -> a.getAuthority().equals("ROLE_" + Roles.USER) || a.getAuthority().equals("ROLE_" + Roles.ADMIN));
 	}
+
+	/** Gli admin possono fare tutto; senza sicurezza attiva (sviluppo locale) lo sono tutti. */
+	public boolean isAdmin() {
+		if (!securityEnabled) return true;
+		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+		return auth != null && auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_" + Roles.ADMIN));
+	}
 }

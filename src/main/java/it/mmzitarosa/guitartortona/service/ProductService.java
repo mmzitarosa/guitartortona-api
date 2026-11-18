@@ -65,27 +65,32 @@ public class ProductService {
 	 */
 	@Transactional(readOnly = true) public List<ProductEventDTO> getProductHistory(Long id) {
 		getProduct(id);
-		List<ProductEventDTO> events = new java.util.ArrayList<>();
+		// Coppie (id di inserimento, evento): la data non ha l'orario, quindi a parità di data conta l'ordine di inserimento
+		List<java.util.Map.Entry<Long, ProductEventDTO>> events = new java.util.ArrayList<>();
 		boolean full = currentUser.canSeeCosts();
 		purchaseItemRepository.findActiveByProductId(id).forEach(item -> {
 			String status = item.getPurchase().getStatus() == null ? null : item.getPurchase().getStatus().name();
 			if (!full) { // solo quantità: niente costi, fattura, fornitore o note
-				events.add(new ProductEventDTO(ProductEventDTO.PURCHASE, item.getPurchase().getDate(), item.getQuantity(),
-						null, null, null, null, null, null, status));
+				events.add(java.util.Map.entry(item.getId(), new ProductEventDTO(ProductEventDTO.PURCHASE, item.getPurchase().getDate(), item.getQuantity(),
+						null, null, null, null, null, null, status)));
 				return;
 			}
 			Object purchase = Hibernate.unproxy(item.getPurchase());
 			IncomingInvoiceEntity invoice = purchase instanceof IncomingInvoiceEntity i ? i : null;
-			events.add(new ProductEventDTO(ProductEventDTO.PURCHASE, item.getPurchase().getDate(), item.getQuantity(),
+			events.add(java.util.Map.entry(item.getId(), new ProductEventDTO(ProductEventDTO.PURCHASE, item.getPurchase().getDate(), item.getQuantity(),
 					item.getPurchasePrice(), item.getVat(), item.getPurchase().getNotes(),
 					item.getPurchase().getId(), invoice == null ? null : invoice.getNumber(),
 					invoice == null || invoice.getSupplier() == null ? null : invoice.getSupplier().getName(),
-					status));
+					status)));
 		});
-		saleRepository.findByProductId(id).forEach(sale -> events.add(new ProductEventDTO(ProductEventDTO.SALE, sale.getDate(),
-				sale.getQuantity(), full ? sale.getSalePrice() : null, full ? sale.getVat() : null, sale.getNotes(), null, null, null, null)));
-		events.sort(Comparator.comparing(ProductEventDTO::date, Comparator.nullsLast(Comparator.reverseOrder())));
-		return events;
+		saleRepository.findByProductId(id).forEach(sale -> events.add(java.util.Map.entry(sale.getId(), new ProductEventDTO(ProductEventDTO.SALE, sale.getDate(),
+				sale.getQuantity(), full ? sale.getSalePrice() : null, full ? sale.getVat() : null, sale.getNotes(), null, null, null, null))));
+		// Data decrescente, a parità di data prima le vendite degli acquisti, poi inserimento più recente per primo
+		events.sort(Comparator
+				.comparing((java.util.Map.Entry<Long, ProductEventDTO> e) -> e.getValue().date(), Comparator.nullsLast(Comparator.reverseOrder()))
+				.thenComparing(e -> ProductEventDTO.SALE.equals(e.getValue().type()) ? 0 : 1)
+				.thenComparing(java.util.Map.Entry::getKey, Comparator.reverseOrder()));
+		return events.stream().map(java.util.Map.Entry::getValue).toList();
 	}
 
 	/**

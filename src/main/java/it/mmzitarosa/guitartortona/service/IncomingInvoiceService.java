@@ -23,6 +23,7 @@ public class IncomingInvoiceService {
 
 	private final IncomingInvoiceRepository repository;
 	private final SupplierService supplierService;
+	private final it.mmzitarosa.guitartortona.security.CurrentUser currentUser;
 
 	/**
 	 * GET /incomingInvoices
@@ -145,11 +146,11 @@ public class IncomingInvoiceService {
 	}
 
 	/**
-	 * Helper: Recupera incomingInvoice modificabile (bozza e non archiviata)
+	 * Helper: Recupera incomingInvoice modificabile (non archiviata; per gli utenti solo bozze, gli admin possono modificare anche le confermate)
 	 */
 	protected IncomingInvoiceEntity getEditableIncomingInvoice(long id) {
 		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
-		if (incomingInvoice.isArchived() || !incomingInvoice.isDraft())
+		if (incomingInvoice.isArchived() || (!incomingInvoice.isDraft() && !currentUser.isAdmin()))
 			throw new ConflictException("INVOICE_NOT_EDITABLE", "Invoice is not editable: " + id);
 		return incomingInvoice;
 	}

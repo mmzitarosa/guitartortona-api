@@ -5,6 +5,7 @@ import it.mmzitarosa.guitartortona.dto.product.ProductDetailDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductEventDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductInput;
 import it.mmzitarosa.guitartortona.dto.product.ProductListDTO;
+import it.mmzitarosa.guitartortona.dto.sale.CartSaleInput;
 import it.mmzitarosa.guitartortona.dto.sale.SaleInput;
 import it.mmzitarosa.guitartortona.service.ProductService;
 import it.mmzitarosa.guitartortona.service.SaleService;
@@ -59,5 +60,11 @@ public class ProductController {
 	@PostMapping("/product/{id}/sell")
 	public ResponseEntity<ProductDetailDTO> addProductSale(@PathVariable long id, @Valid @RequestBody SaleInput request) {
 		return ResponseEntity.ok(saleService.addProductSale(id, request));
+	}
+
+	@PostMapping("/sales")
+	public ResponseEntity<Void> addCartSale(@Valid @RequestBody CartSaleInput request) {
+		saleService.addCartSale(request);
+		return ResponseEntity.noContent().build();
 	}
 }
