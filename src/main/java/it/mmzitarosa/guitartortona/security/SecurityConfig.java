@@ -59,6 +59,9 @@ public class SecurityConfig {
 						.requestMatchers(EndpointRequest.to(HealthEndpoint.class)).permitAll()
 						.requestMatchers(HttpMethod.GET, "/fonts/**", "/images/**").permitAll()
 						.requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole(Roles.ADMIN)
+						// Fatture e brogliaccio contengono costi: vietati ai viewer
+						.requestMatchers(HttpMethod.GET, "/api/v1/incomingInvoice/**", "/api/v1/incomingInvoices", "/api/v1/archive/**",
+								"/api/v1/ledger/**", "/api/v1/ledgerEntry/**").hasAnyRole(Roles.USER, Roles.ADMIN)
 						.requestMatchers(HttpMethod.GET, "/api/v1/**").hasAnyRole(Roles.VIEWER, Roles.USER, Roles.ADMIN)
 						.requestMatchers(HttpMethod.DELETE, "/api/v1/**").hasRole(Roles.ADMIN)
 						.requestMatchers(HttpMethod.POST, "/api/v1/**").hasAnyRole(Roles.USER, Roles.ADMIN)

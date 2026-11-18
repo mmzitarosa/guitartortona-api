@@ -2,6 +2,7 @@ package it.mmzitarosa.guitartortona.controller;
 
 import it.mmzitarosa.guitartortona.dto.PageDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductDetailDTO;
+import it.mmzitarosa.guitartortona.dto.product.ProductEventDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductInput;
 import it.mmzitarosa.guitartortona.dto.product.ProductListDTO;
 import it.mmzitarosa.guitartortona.dto.sale.SaleInput;
@@ -39,6 +40,10 @@ public class ProductController {
 
 	@GetMapping("/product/{id}") public ResponseEntity<ProductDetailDTO> getProductDetail(@PathVariable long id) {
 		return ResponseEntity.ok(service.getProductDetail(id));
+	}
+
+	@GetMapping("/product/{id}/history") public ResponseEntity<List<ProductEventDTO>> getProductHistory(@PathVariable long id) {
+		return ResponseEntity.ok(service.getProductHistory(id));
 	}
 
 	@GetMapping("/product") public ResponseEntity<ProductDetailDTO> getProductDetailByCode(@RequestParam String code) {

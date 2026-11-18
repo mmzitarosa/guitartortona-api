@@ -62,8 +62,19 @@ class SecurityConfigTest {
 		mvc.perform(get("/images/logo90.png")).andExpect(status().isNotFound());
 	}
 
-	@Test void viewerCanRead() throws Exception {
-		mvc.perform(get("/api/v1/ledger").param("year", "2025").with(withRole(Roles.VIEWER))).andExpect(status().isOk());
+	@Test void viewerCannotReadLedger() throws Exception {
+		mvc.perform(get("/api/v1/ledger").param("year", "2025").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+		mvc.perform(get("/api/v1/ledgerEntry/1").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+	}
+
+	@Test void viewerCannotReadInvoices() throws Exception {
+		mvc.perform(get("/api/v1/incomingInvoices").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+		mvc.perform(get("/api/v1/incomingInvoice/1").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+		mvc.perform(get("/api/v1/archive/incomingInvoices").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+	}
+
+	@Test void userCanReadLedger() throws Exception {
+		mvc.perform(get("/api/v1/ledger").param("year", "2025").with(withRole(Roles.USER))).andExpect(status().isOk());
 	}
 
 	@Test void viewerCannotDelete() throws Exception {

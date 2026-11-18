@@ -2,7 +2,6 @@ package it.mmzitarosa.guitartortona.dto.product;
 
 import it.mmzitarosa.guitartortona.dto.brand.BrandDTO;
 import it.mmzitarosa.guitartortona.dto.category.CategoryDTO;
-import it.mmzitarosa.guitartortona.dto.purchase.PurchaseItemDTO;
 import it.mmzitarosa.guitartortona.dto.sale.SaleDTO;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
 import it.mmzitarosa.guitartortona.utils.Constant.ProductCondition;
@@ -21,7 +20,6 @@ public record ProductDetailDTO(
 		String notes,
 		Integer stock,
 		Integer pendingStock,
-		List<PurchaseItemDTO> purchases,
 		List<SaleDTO> sales
 ) {
 	public static ProductDetailDTO of(ProductEntity entity) {
@@ -37,7 +35,6 @@ public record ProductDetailDTO(
 				entity.getNotes(),
 				entity.getStock(),
 				entity.getStockPending(),
-				entity.getPurchaseItems().stream().filter(pi -> !pi.getPurchase().isArchived()).map(PurchaseItemDTO::of).toList(),
 				entity.getSales().stream().map(SaleDTO::of).toList()
 		);
 	}

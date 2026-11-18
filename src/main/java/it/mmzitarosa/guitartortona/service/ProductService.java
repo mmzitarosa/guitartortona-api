@@ -12,6 +12,13 @@ import it.mmzitarosa.guitartortona.entity.BrandEntity;
 import it.mmzitarosa.guitartortona.entity.CategoryEntity;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
 import it.mmzitarosa.guitartortona.repository.ProductRepository;
+import it.mmzitarosa.guitartortona.repository.PurchaseItemRepository;
+import it.mmzitarosa.guitartortona.repository.SaleRepository;
+import it.mmzitarosa.guitartortona.dto.product.ProductEventDTO;
+import it.mmzitarosa.guitartortona.entity.IncomingInvoiceEntity;
+import org.hibernate.Hibernate;
+import java.util.Comparator;
+import it.mmzitarosa.guitartortona.security.CurrentUser;
 import it.mmzitarosa.guitartortona.specification.ProductSpecification;
 import it.mmzitarosa.guitartortona.utils.Constant.ProductCondition;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +36,9 @@ public class ProductService {
 	private final ProductRepository repository;
 	private final CategoryService categoryService;
 	private final BrandService brandService;
+	private final SaleRepository saleRepository;
+	private final PurchaseItemRepository purchaseItemRepository;
+	private final CurrentUser currentUser;
 
 	/**
 	 * GET /products
@@ -47,6 +57,35 @@ public class ProductService {
 	@Transactional(readOnly = true) public ProductDetailDTO getProductDetail(Long id) {
 		ProductEntity product = getProduct(id);
 		return ProductDetailDTO.of(product);
+	}
+
+	/**
+	 * GET /product/{id}/history
+	 * Acquisti (righe di fattura non archiviate) e vendite, dal più recente.
+	 */
+	@Transactional(readOnly = true) public List<ProductEventDTO> getProductHistory(Long id) {
+		getProduct(id);
+		List<ProductEventDTO> events = new java.util.ArrayList<>();
+		boolean full = currentUser.canSeeCosts();
+		purchaseItemRepository.findActiveByProductId(id).forEach(item -> {
+			String status = item.getPurchase().getStatus() == null ? null : item.getPurchase().getStatus().name();
+			if (!full) { // solo quantità: niente costi, fattura, fornitore o note
+				events.add(new ProductEventDTO(ProductEventDTO.PURCHASE, item.getPurchase().getDate(), item.getQuantity(),
+						null, null, null, null, null, null, status));
+				return;
+			}
+			Object purchase = Hibernate.unproxy(item.getPurchase());
+			IncomingInvoiceEntity invoice = purchase instanceof IncomingInvoiceEntity i ? i : null;
+			events.add(new ProductEventDTO(ProductEventDTO.PURCHASE, item.getPurchase().getDate(), item.getQuantity(),
+					item.getPurchasePrice(), item.getVat(), item.getPurchase().getNotes(),
+					item.getPurchase().getId(), invoice == null ? null : invoice.getNumber(),
+					invoice == null || invoice.getSupplier() == null ? null : invoice.getSupplier().getName(),
+					status));
+		});
+		saleRepository.findByProductId(id).forEach(sale -> events.add(new ProductEventDTO(ProductEventDTO.SALE, sale.getDate(),
+				sale.getQuantity(), full ? sale.getSalePrice() : null, full ? sale.getVat() : null, sale.getNotes(), null, null, null, null)));
+		events.sort(Comparator.comparing(ProductEventDTO::date, Comparator.nullsLast(Comparator.reverseOrder())));
+		return events;
 	}
 
 	/**
