@@ -1,5 +1,6 @@
 package it.mmzitarosa.guitartortona.controller;
 
+import it.mmzitarosa.guitartortona.dto.PageDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductDetailDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductInput;
 import it.mmzitarosa.guitartortona.dto.product.ProductListDTO;
@@ -24,9 +25,16 @@ public class ProductController {
 
 	/* == READ == */
 	@GetMapping("/products")
-	public ResponseEntity<List<ProductListDTO>> getAllProducts(@RequestParam(name = "search", required = false) String search, @SortDefault(sort = "id", direction = Sort.Direction.DESC) Sort sort) {
-		if (search != null) return ResponseEntity.ok(service.searchProducts(search, sort));
-		return ResponseEntity.ok(service.getAllProducts(sort));
+	public ResponseEntity<PageDTO<ProductListDTO>> getProducts(
+			@RequestParam(required = false) String search,
+			@RequestParam(required = false) String description,
+			@RequestParam(required = false) Long categoryId,
+			@RequestParam(required = false) Long brandId,
+			@RequestParam(defaultValue = "false") boolean available,
+			@RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "15") int size,
+			@SortDefault(sort = "id", direction = Sort.Direction.DESC) Sort sort) {
+		return ResponseEntity.ok(service.getProducts(search, description, categoryId, brandId, available, page, size, sort));
 	}
 
 	@GetMapping("/product/{id}") public ResponseEntity<ProductDetailDTO> getProductDetail(@PathVariable long id) {

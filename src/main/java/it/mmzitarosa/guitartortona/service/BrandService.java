@@ -31,6 +31,10 @@ public class BrandService {
 	 * Helper: Trova o crea brand
 	 */
 	@Transactional protected BrandEntity findOrCreateBrand(BrandInput brand) {
+		// La marca è facoltativa
+		if (brand == null || (brand.id() == null && (brand.name() == null || brand.name().isBlank())))
+			return null;
+
 		if (brand.id() != null) {
 			return repository.findById(brand.id())
 					.orElseThrow(() -> new NotFoundException("BRAND_NOT_FOUND", "Brand not found: " + brand.id()));

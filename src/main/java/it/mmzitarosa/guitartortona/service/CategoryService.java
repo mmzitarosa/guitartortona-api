@@ -10,7 +10,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -39,6 +41,20 @@ public class CategoryService {
 	 */
 	public List<CategoryDTO> getAllCategories() {
 		return categories;
+	}
+
+	/**
+	 * Id della categoria e di tutte le sue sotto-categorie
+	 */
+	public Set<Long> getCategoryAndDescendantIds(long id) {
+		Set<Long> ids = new LinkedHashSet<>();
+		collectIds(getCategory(id), ids);
+		return ids;
+	}
+
+	private void collectIds(CategoryEntity category, Set<Long> ids) {
+		if (!ids.add(category.getId()) || category.getSubCategories() == null) return;
+		category.getSubCategories().forEach(sub -> collectIds(sub, ids));
 	}
 
 	/**
