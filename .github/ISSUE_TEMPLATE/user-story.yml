@@ -1,0 +1,25 @@
+name: User story
+description: Nuovo requisito funzionale
+labels: [enhancement]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: User story
+      placeholder: Come <ruolo> voglio <obiettivo> per <beneficio>
+    validations: { required: true }
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Criteri di accettazione
+      placeholder: |
+        Dato ... Quando ... Allora ...
+    validations: { required: true }
+  - type: textarea
+    id: nonfunctional
+    attributes:
+      label: Requisiti non funzionali (sicurezza, UX, performance)
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Fuori scope

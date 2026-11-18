@@ -1,0 +1,20 @@
+name: Bug
+description: Segnala un malfunzionamento
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: Cosa succede }
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes: { label: Passi per riprodurre }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: Comportamento atteso }
+  - type: dropdown
+    id: env
+    attributes:
+      label: Ambiente
+      options: [local, staging, production]
