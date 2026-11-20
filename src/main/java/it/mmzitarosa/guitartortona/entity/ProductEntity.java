@@ -26,9 +26,9 @@ public class ProductEntity extends DateEntity {
 	@Column(name = "reorder_point") private Integer reorderPoint;
 	private String notes;
 
-	// Aggiornate mediante trigger
-	private Integer stock = 0;
-	private Integer stockPending = 0;
+	// Aggiornate mediante trigger: updatable=false evita che Hibernate le sovrascriva con valori obsoleti
+	@Column(name = "stock", updatable = false) private Integer stock = 0;
+	@Column(name = "stock_pending", updatable = false) private Integer stockPending = 0;
 
 	@Exclude @OneToMany(mappedBy = "product") private List<PurchaseItemEntity> purchaseItems = new ArrayList<>();
 	@Exclude @OneToMany(mappedBy = "product") private List<SaleEntity> sales = new ArrayList<>();
