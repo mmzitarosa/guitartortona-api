@@ -2,12 +2,13 @@ package it.mmzitarosa.guitartortona.controller;
 
 import it.mmzitarosa.guitartortona.dto.PageDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductDetailDTO;
-import it.mmzitarosa.guitartortona.dto.product.ProductEventDTO;
+import it.mmzitarosa.guitartortona.dto.product.ProductTimelineDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductInput;
 import it.mmzitarosa.guitartortona.dto.product.ProductListDTO;
 import it.mmzitarosa.guitartortona.dto.sale.CartSaleInput;
 import it.mmzitarosa.guitartortona.dto.sale.SaleInput;
 import it.mmzitarosa.guitartortona.service.ProductService;
+import it.mmzitarosa.guitartortona.service.ProductTimelineService;
 import it.mmzitarosa.guitartortona.service.SaleService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class ProductController {
 
 	private final ProductService service;
 	private final SaleService saleService;
+	private final ProductTimelineService timelineService;
 
 	/* == READ == */
 	@GetMapping("/products")
@@ -43,8 +45,8 @@ public class ProductController {
 		return ResponseEntity.ok(service.getProductDetail(id));
 	}
 
-	@GetMapping("/product/{id}/history") public ResponseEntity<List<ProductEventDTO>> getProductHistory(@PathVariable long id) {
-		return ResponseEntity.ok(service.getProductHistory(id));
+	@GetMapping("/product/{id}/timeline") public ResponseEntity<ProductTimelineDTO> getProductTimeline(@PathVariable long id) {
+		return ResponseEntity.ok(timelineService.getTimeline(id));
 	}
 
 	@GetMapping("/product") public ResponseEntity<ProductDetailDTO> getProductDetailByCode(@RequestParam String code) {

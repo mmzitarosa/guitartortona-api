@@ -26,7 +26,7 @@ import java.util.List;
  * <ul>
  *   <li>GET /api/v1/**: app-user, app-admin, guitarlab-viewer</li>
  *   <li>POST/PUT/PATCH /api/v1/**: app-user, app-admin</li>
- *   <li>DELETE /api/v1/**: app-admin</li>
+ *   <li>DELETE /api/v1/**: app-admin; GET /api/v1/audit: app-admin</li>
  *   <li>actuator: sulla porta di management separata (non esposta) e' libero per probe/Prometheus; sulla porta dell'API solo health e' pubblico, il resto richiede app-admin</li>
  *   <li>tutto il resto: negato</li>
  * </ul>
@@ -59,6 +59,8 @@ public class SecurityConfig {
 						.requestMatchers(EndpointRequest.to(HealthEndpoint.class)).permitAll()
 						.requestMatchers(HttpMethod.GET, "/fonts/**", "/images/**").permitAll()
 						.requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole(Roles.ADMIN)
+						// Il registro di audit si consulta solo da admin
+						.requestMatchers(HttpMethod.GET, "/api/v1/audit/**").hasRole(Roles.ADMIN)
 						// Fatture e brogliaccio contengono costi: vietati ai viewer
 						.requestMatchers(HttpMethod.GET, "/api/v1/incomingInvoice/**", "/api/v1/incomingInvoices", "/api/v1/archive/**",
 								"/api/v1/ledger/**", "/api/v1/ledgerEntry/**").hasAnyRole(Roles.USER, Roles.ADMIN)
