@@ -114,35 +114,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull RC image
-        env:
-          RC_TAG: ${{ inputs.rc_tag }}
-          IMAGE: ghcr.io/${{ github.repository }}
-        run: |
-          docker pull "$IMAGE:$RC_TAG"
-
-      - name: Re-tag for production
+      - name: Re-tag for production (manifest multi-arch)
         env:
           RC_TAG: ${{ inputs.rc_tag }}
           PROD_TAG: ${{ needs.validate.outputs.prod_tag }}
           IMAGE: ghcr.io/${{ github.repository }}
         run: |
-          docker tag "$IMAGE:$RC_TAG" "$IMAGE:$PROD_TAG"
-          docker tag "$IMAGE:$RC_TAG" "$IMAGE:latest"
-          
-          echo "✅ Images re-tagged:"
+          # imagetools copia il manifest multi-arch senza scaricare l'immagine
+          docker buildx imagetools create -t "$IMAGE:$PROD_TAG" -t "$IMAGE:latest" "$IMAGE:$RC_TAG"
+
+          echo "✅ Images re-tagged and pushed:"
           echo "  - $PROD_TAG"
           echo "  - latest"
-
-      - name: Push production images
-        env:
-          PROD_TAG: ${{ needs.validate.outputs.prod_tag }}
-          IMAGE: ghcr.io/${{ github.repository }}
-        run: |
-          docker push "$IMAGE:$PROD_TAG"
-          docker push "$IMAGE:latest"
-          
-          echo "✅ Images pushed to registry"
 
   # ============================================================================
   # JOB 3: Update Deployment Repository
