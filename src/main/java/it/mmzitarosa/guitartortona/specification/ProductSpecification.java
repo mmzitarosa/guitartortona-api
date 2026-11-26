@@ -19,7 +19,7 @@ public class ProductSpecification {
 
 	/**
 	 * Filtri combinabili (AND). Ogni parametro nullo viene ignorato.
-	 * search: ricerca libera su descrizione, codici, marca e categoria (con ordinamento per pertinenza).
+	 * search: ricerca libera su descrizione, marca e categoria (i codici hanno la ricerca puntuale dedicata).
 	 * description: filtro sulla sola descrizione.
 	 * categoryIds: categoria e relative sotto-categorie.
 	 */
@@ -42,12 +42,8 @@ public class ProductSpecification {
 				Join<ProductEntity, BrandEntity> brand = root.join("brand", JoinType.LEFT);
 				Join<ProductEntity, CategoryEntity> category = root.join("category", JoinType.LEFT);
 
-				Expression<String> code = cb.lower(cb.coalesce(root.get("code"), ""));
-				Expression<String> internalCode = cb.lower(cb.coalesce(root.get("internalCode"), ""));
 				List<Expression<String>> fields = List.of(
 						cb.lower(cb.coalesce(root.get("description"), "")),
-						code,
-						internalCode,
 						cb.lower(cb.coalesce(brand.get("name"), "")),
 						cb.lower(cb.coalesce(category.get("name"), "")));
 
@@ -57,18 +53,6 @@ public class ProductSpecification {
 					predicates.add(cb.or(fields.stream()
 							.map(f -> cb.like(f, pattern, '\\'))
 							.toArray(Predicate[]::new)));
-				}
-
-				// Pertinenza: codice esatto, poi codice che inizia con la ricerca, poi il resto.
-				// L'ordinamento si applica solo alla query dei dati, non al count.
-				if (query != null && query.getResultType() != Long.class && query.getResultType() != long.class) {
-					String exact = search.toLowerCase().trim();
-					Expression<Integer> relevance = cb.<Integer>selectCase()
-							.when(cb.or(cb.equal(code, exact), cb.equal(internalCode, exact)), 0)
-							.when(cb.or(cb.like(code, escapeLike(exact) + "%", '\\'),
-									cb.like(internalCode, escapeLike(exact) + "%", '\\')), 1)
-							.otherwise(2);
-					query.orderBy(cb.asc(relevance), cb.desc(root.get("id")));
 				}
 			}
 
