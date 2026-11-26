@@ -61,7 +61,13 @@ public class IncomingInvoiceController {
 		return ResponseEntity.ok(service.restoreIncomingInvoice(id));
 	}
 
-	/* == DELETE == */
+	@PatchMapping("/incomingInvoice/{id}/archive")
+	public ResponseEntity<Void> archiveIncomingInvoice(@PathVariable long id) {
+		service.archiveIncomingInvoice(id);
+		return ResponseEntity.noContent().build();
+	}
+
+	/* == DELETE (fisica, solo admin e solo se già archiviata) == */
 	@DeleteMapping("/incomingInvoice/{id}")
 	public ResponseEntity<Void> deleteIncomingInvoice(@PathVariable long id) {
 		service.deleteIncomingInvoice(id);

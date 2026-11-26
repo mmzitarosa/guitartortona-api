@@ -30,6 +30,8 @@ public class IncomingInvoiceService {
 	 * GET /archived/incomingInvoices
 	 */
 	@Transactional(readOnly = true) public List<IncomingInvoiceListDTO> getAllIncomingInvoices(boolean archived, Sort sort) {
+		if (archived && !currentUser.isAdmin())
+			return List.of();
 		return repository.findAllByArchived(archived, sort).stream()
 				.map(IncomingInvoiceListDTO::of)
 				.toList();
@@ -116,7 +118,24 @@ public class IncomingInvoiceService {
 	}
 
 	/**
-	 * PATCH /incomingInvoice/{id}/restore
+	 * PATCH /incomingInvoice/{id}/archive
+	 * Eliminazione apparente: lo stato non cambia, quindi il ripristino riporta la fattura com'era.
+	 * Gli utenti possono archiviare solo le bozze, gli admin qualsiasi fattura.
+	 */
+	public void archiveIncomingInvoice(Long id) {
+		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
+
+		if (incomingInvoice.isArchived())
+			return;
+		if (!incomingInvoice.isDraft() && !currentUser.isAdmin())
+			throw new ConflictException("INVOICE_NOT_ARCHIVABLE", "Only draft invoices can be archived: " + id);
+
+		incomingInvoice.setArchived(true);
+		repository.save(incomingInvoice);
+	}
+
+	/**
+	 * PATCH /incomingInvoice/{id}/restore (solo admin)
 	 */
 	public IncomingInvoiceDetailDTO restoreIncomingInvoice(Long id) {
 		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
@@ -130,19 +149,16 @@ public class IncomingInvoiceService {
 	}
 
 	/**
-	 * DELETE /incomingInvoice/{id}
+	 * DELETE /incomingInvoice/{id} (solo admin)
+	 * Cancellazione fisica, ammessa solo per fatture già archiviate.
 	 */
 	public void deleteIncomingInvoice(Long id) {
 		IncomingInvoiceEntity incomingInvoice = getIncomingInvoice(id);
 
-		if (incomingInvoice.isArchived()) {
-			// Già archiviata -> elimina
-			repository.delete(incomingInvoice);
-		} else {
-			// Prima volta -> archivia
-			incomingInvoice.setArchived(true);
-			repository.save(incomingInvoice);
-		}
+		if (!incomingInvoice.isArchived())
+			throw new ConflictException("INVOICE_NOT_ARCHIVED", "Only archived invoices can be permanently deleted: " + id);
+
+		repository.delete(incomingInvoice);
 	}
 
 	/**
@@ -156,10 +172,11 @@ public class IncomingInvoiceService {
 	}
 
 	/**
-	 * Helper: Recupera incomingInvoice
+	 * Helper: Recupera incomingInvoice. Le archiviate sono visibili solo agli admin.
 	 */
 	protected IncomingInvoiceEntity getIncomingInvoice(long id) {
 		return repository.findById(id)
+				.filter(i -> !i.isArchived() || currentUser.isAdmin())
 				.orElseThrow(() -> new NotFoundException("INVOICE_NOT_FOUND", "Invoice not found: " + id));
 	}
 

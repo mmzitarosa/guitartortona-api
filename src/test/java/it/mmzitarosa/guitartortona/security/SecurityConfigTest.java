@@ -1,6 +1,9 @@
 package it.mmzitarosa.guitartortona.security;
 
+import it.mmzitarosa.guitartortona.controller.IncomingInvoiceController;
 import it.mmzitarosa.guitartortona.controller.LedgerController;
+import it.mmzitarosa.guitartortona.service.IncomingInvoiceService;
+import it.mmzitarosa.guitartortona.service.PurchaseItemService;
 import it.mmzitarosa.guitartortona.service.LedgerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,9 +37,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SecurityConfigTest {
 
 	@Configuration @EnableWebMvc @EnableSpringDataWebSupport
-	@org.springframework.context.annotation.Import({SecurityConfig.class, LedgerController.class})
+	@org.springframework.context.annotation.Import({SecurityConfig.class, LedgerController.class, IncomingInvoiceController.class})
 	static class TestConfig {
 		@Bean LedgerService ledgerService() { return Mockito.mock(LedgerService.class); }
+		@Bean PurchaseItemService purchaseItemService() { return Mockito.mock(PurchaseItemService.class); }
+		@Bean IncomingInvoiceService incomingInvoiceService() { return Mockito.mock(IncomingInvoiceService.class); }
 		@Bean JwtDecoder jwtDecoder() { return Mockito.mock(JwtDecoder.class); }
 	}
 
@@ -71,6 +76,18 @@ class SecurityConfigTest {
 		mvc.perform(get("/api/v1/incomingInvoices").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
 		mvc.perform(get("/api/v1/incomingInvoice/1").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
 		mvc.perform(get("/api/v1/archive/incomingInvoices").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+	}
+
+	@Test void archivedInvoicesAndRestoreAreAdminOnly() throws Exception {
+		mvc.perform(get("/api/v1/archive/incomingInvoices").with(withRole(Roles.USER))).andExpect(status().isForbidden());
+		mvc.perform(patch("/api/v1/incomingInvoice/1/restore").with(withRole(Roles.USER))).andExpect(status().isForbidden());
+		mvc.perform(get("/api/v1/archive/incomingInvoices").with(withRole(Roles.ADMIN))).andExpect(status().isOk());
+		mvc.perform(patch("/api/v1/incomingInvoice/1/restore").with(withRole(Roles.ADMIN))).andExpect(status().is2xxSuccessful());
+	}
+
+	@Test void userCanArchiveInvoice() throws Exception {
+		mvc.perform(patch("/api/v1/incomingInvoice/1/archive").with(withRole(Roles.USER))).andExpect(status().isNoContent());
+		mvc.perform(patch("/api/v1/incomingInvoice/1/archive").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
 	}
 
 	@Test void userCanReadLedger() throws Exception {
