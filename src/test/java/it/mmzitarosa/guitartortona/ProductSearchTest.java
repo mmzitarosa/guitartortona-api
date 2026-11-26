@@ -67,7 +67,7 @@ class ProductSearchTest {
 
 	private List<Long> find(String search, String description, List<Long> categoryIds, Long brandId, boolean available) {
 		return repository.findAll(ProductSpecification.withFilters(search, description, categoryIds, brandId, available),
-						PageRequest.of(0, 15, search == null ? Sort.by("id") : Sort.unsorted()))
+						PageRequest.of(0, 15, search == null ? Sort.by("id") : Sort.by(Sort.Direction.DESC, "id")))
 				.map(ProductListDTO::of).map(ProductListDTO::id).getContent();
 	}
 
@@ -89,9 +89,9 @@ class ProductSearchTest {
 		assertEquals(List.of(4L), search("senza marca", null, null, false));
 	}
 
-	@Test void exactCodeComesFirst() {
-		assertEquals(1L, search("fs-001", null, null, false).get(0));
-		assertEquals(List.of(3L), search("g-0003", null, null, false));
+	@Test void searchDoesNotMatchCodes() {
+		assertEquals(List.of(), search("fs-001", null, null, false));
+		assertEquals(List.of(), search("g-0003", null, null, false));
 	}
 
 	@Test void likeWildcardsAreEscaped() {

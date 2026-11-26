@@ -12,7 +12,10 @@ import it.mmzitarosa.guitartortona.entity.BrandEntity;
 import it.mmzitarosa.guitartortona.entity.CategoryEntity;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
 import it.mmzitarosa.guitartortona.repository.ProductRepository;
+import it.mmzitarosa.guitartortona.security.CurrentUser;
 import it.mmzitarosa.guitartortona.specification.ProductSpecification;
+import it.mmzitarosa.guitartortona.specification.ProductVisibilitySpecification;
+import org.springframework.data.jpa.domain.Specification;
 import it.mmzitarosa.guitartortona.utils.Constant.ProductCondition;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
@@ -28,16 +31,17 @@ public class ProductService {
 	private final ProductRepository repository;
 	private final CategoryService categoryService;
 	private final BrandService brandService;
+	private final CurrentUser currentUser;
 
 	/**
 	 * GET /products
-	 * Con search valorizzato l'ordinamento è per pertinenza e il sort richiesto viene ignorato.
 	 */
 	@Transactional(readOnly = true) public PageDTO<ProductListDTO> getProducts(String search, String description, Long categoryId, Long brandId, boolean available, int page, int size, Sort sort) {
-		boolean searching = search != null && !search.isBlank();
-		Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100), searching ? Sort.unsorted() : sort);
-		return PageDTO.of(repository.findAll(ProductSpecification.withFilters(search, description, categoryId == null ? null : categoryService.getCategoryAndDescendantIds(categoryId), brandId, available), pageable)
-				.map(ProductListDTO::of));
+		Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100), sort);
+		Specification<ProductEntity> spec = ProductSpecification.withFilters(search, description, categoryId == null ? null : categoryService.getCategoryAndDescendantIds(categoryId), brandId, available);
+		if (!currentUser.isAdmin())
+			spec = spec.and(ProductVisibilitySpecification.notOnlyInArchivedPurchases());
+		return PageDTO.of(repository.findAll(spec, pageable).map(ProductListDTO::of));
 	}
 
 	/**
@@ -53,6 +57,7 @@ public class ProductService {
 	 */
 	@Transactional(readOnly = true) public ProductDetailDTO getProductDetailByCode(String code) {
 		ProductEntity product = repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(code, code)
+				.filter(this::isVisible)
 				.orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + code));
 		return ProductDetailDTO.of(product);
 	}
@@ -74,7 +79,16 @@ public class ProductService {
 	 */
 	protected ProductEntity getProduct(long id) {
 		return repository.findById(id)
+				.filter(this::isVisible)
 				.orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + id));
+	}
+
+	/**
+	 * Helper: i non admin non vedono i prodotti creati solo da fatture archiviate
+	 */
+	private boolean isVisible(ProductEntity product) {
+		return currentUser.isAdmin() || repository.exists(ProductVisibilitySpecification.hasId(product.getId())
+				.and(ProductVisibilitySpecification.notOnlyInArchivedPurchases()));
 	}
 
 	/**

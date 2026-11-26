@@ -12,8 +12,7 @@ public record IncomingInvoiceListDTO(
 		@JsonFormat(pattern = "dd/MM/yyyy") LocalDate date,
 		String number,
 		Double amount,
-		Status status,
-		Integer daysLeft
+		Status status
 ) {
 	public static IncomingInvoiceListDTO of(IncomingInvoiceEntity entity) {
 		return new IncomingInvoiceListDTO(
@@ -22,8 +21,7 @@ public record IncomingInvoiceListDTO(
 				entity.getDate(),
 				entity.getNumber(),
 				entity.getAmount(),
-				entity.getStatus(),
-				entity.getDaysLeft()
+				entity.getStatus()
 		);
 	}
 }

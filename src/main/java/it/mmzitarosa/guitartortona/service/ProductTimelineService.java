@@ -13,6 +13,7 @@ import it.mmzitarosa.guitartortona.repository.ProductRepository;
 import it.mmzitarosa.guitartortona.repository.PurchaseItemRepository;
 import it.mmzitarosa.guitartortona.repository.SaleRepository;
 import it.mmzitarosa.guitartortona.security.CurrentUser;
+import it.mmzitarosa.guitartortona.specification.ProductVisibilitySpecification;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
@@ -48,10 +49,12 @@ public class ProductTimelineService {
 
 	@Transactional(readOnly = true)
 	public ProductTimelineDTO getTimeline(Long productId) {
-		if (!productRepository.existsById(productId))
-			throw new NotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + productId);
 		boolean full = currentUser.canSeeCosts();
 		boolean admin = currentUser.isAdmin();
+		boolean exists = admin ? productRepository.existsById(productId)
+				: productRepository.exists(ProductVisibilitySpecification.hasId(productId).and(ProductVisibilitySpecification.notOnlyInArchivedPurchases()));
+		if (!exists)
+			throw new NotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + productId);
 
 		List<AuditLogEntity> audit = auditRepository.findByProductIdOrderByCreatedDateAscIdAsc(productId);
 		List<Entry> entries = new ArrayList<>();

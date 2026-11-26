@@ -7,7 +7,6 @@ import lombok.ToString;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 
 import static it.mmzitarosa.guitartortona.utils.Constant.Status;
 
@@ -27,15 +26,10 @@ public abstract class StatusEntity extends DateEntity {
 		super.onUpdate();
 		if (status == Status.COMPLETED && completedDate == null)
 			completedDate = updatedDate;
-		if (archived && archivedDate == null)
-			archivedDate = updatedDate;
-		else if (archivedDate != null)
+		if (!archived)
 			archivedDate = null;
-	}
-
-	@Transient public Integer getDaysLeft() {
-		if (!archived) return null;
-		return (int) ChronoUnit.DAYS.between(LocalDateTime.now(), updatedDate.plusDays(30));
+		else if (archivedDate == null)
+			archivedDate = updatedDate;
 	}
 
 	@Transient public boolean isDraft() { return isStatus(Status.DRAFT); }

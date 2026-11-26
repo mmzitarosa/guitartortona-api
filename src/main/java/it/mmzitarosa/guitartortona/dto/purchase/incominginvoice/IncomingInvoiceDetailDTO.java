@@ -17,6 +17,7 @@ public record IncomingInvoiceDetailDTO(
 		Double amount,
 		String notes,
 		Status status,
+		boolean archived,
 		List<ProductPurchaseItemDTO> items
 ) {
 	public static IncomingInvoiceDetailDTO of(IncomingInvoiceEntity entity) {
@@ -28,6 +29,7 @@ public record IncomingInvoiceDetailDTO(
 				entity.getAmount(),
 				entity.getNotes(),
 				entity.getStatus(),
+				entity.isArchived(),
 				entity.getItems().stream()
 						.map(ProductPurchaseItemDTO::of)
 						.toList());

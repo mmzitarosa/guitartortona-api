@@ -61,6 +61,9 @@ public class SecurityConfig {
 						.requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole(Roles.ADMIN)
 						// Il registro di audit si consulta solo da admin
 						.requestMatchers(HttpMethod.GET, "/api/v1/audit/**").hasRole(Roles.ADMIN)
+						// Le fatture archiviate (eliminate) e il loro ripristino sono riservati agli admin
+						.requestMatchers(HttpMethod.GET, "/api/v1/archive/incomingInvoices").hasRole(Roles.ADMIN)
+						.requestMatchers(HttpMethod.PATCH, "/api/v1/incomingInvoice/*/restore").hasRole(Roles.ADMIN)
 						// Fatture e brogliaccio contengono costi: vietati ai viewer
 						.requestMatchers(HttpMethod.GET, "/api/v1/incomingInvoice/**", "/api/v1/incomingInvoices", "/api/v1/archive/**",
 								"/api/v1/ledger/**", "/api/v1/ledgerEntry/**").hasAnyRole(Roles.USER, Roles.ADMIN)
