@@ -3,6 +3,7 @@ package it.mmzitarosa.guitartortona.specification;
 import it.mmzitarosa.guitartortona.entity.BrandEntity;
 import it.mmzitarosa.guitartortona.entity.CategoryEntity;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
+import it.mmzitarosa.guitartortona.utils.Constant.ProductCondition;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
@@ -23,7 +24,7 @@ public class ProductSpecification {
 	 * description: filtro sulla sola descrizione.
 	 * categoryIds: categoria e relative sotto-categorie.
 	 */
-	public static Specification<ProductEntity> withFilters(String search, String description, Collection<Long> categoryIds, Long brandId, boolean available) {
+	public static Specification<ProductEntity> withFilters(String search, String description, Collection<Long> categoryIds, Long brandId, ProductCondition condition, boolean available) {
 		return (root, query, cb) -> {
 			List<Predicate> predicates = new ArrayList<>();
 
@@ -35,6 +36,8 @@ public class ProductSpecification {
 			}
 			if (brandId != null)
 				predicates.add(cb.equal(root.get("brand").get("id"), brandId));
+			if (condition != null)
+				predicates.add(cb.equal(root.get("condition"), condition));
 			if (available)
 				predicates.add(cb.or(cb.greaterThan(root.get("stock"), 0), cb.greaterThan(root.get("stockPending"), 0)));
 

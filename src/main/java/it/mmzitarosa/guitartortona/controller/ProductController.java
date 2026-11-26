@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.SortDefault;
 import org.springframework.http.ResponseEntity;
+import it.mmzitarosa.guitartortona.utils.Constant.ProductCondition;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -34,11 +35,12 @@ public class ProductController {
 			@RequestParam(required = false) String description,
 			@RequestParam(required = false) Long categoryId,
 			@RequestParam(required = false) Long brandId,
+			@RequestParam(required = false) ProductCondition condition,
 			@RequestParam(defaultValue = "false") boolean available,
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "15") int size,
 			@SortDefault(sort = "id", direction = Sort.Direction.DESC) Sort sort) {
-		return ResponseEntity.ok(service.getProducts(search, description, categoryId, brandId, available, page, size, sort));
+		return ResponseEntity.ok(service.getProducts(search, description, categoryId, brandId, condition, available, page, size, sort));
 	}
 
 	@GetMapping("/product/{id}") public ResponseEntity<ProductDetailDTO> getProductDetail(@PathVariable long id) {

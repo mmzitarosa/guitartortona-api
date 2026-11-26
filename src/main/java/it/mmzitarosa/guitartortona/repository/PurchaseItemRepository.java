@@ -14,6 +14,9 @@ public interface PurchaseItemRepository extends JpaRepository<PurchaseItemEntity
 			"AND pi.product.id = :productId")
 	boolean existsByPurchaseAndProduct(@Param("purchaseId") Long purchaseId, @Param("productId") Long productId);
 
+	@Query("SELECT COALESCE(SUM(pi.purchasePrice * pi.quantity), 0) FROM PurchaseItemEntity pi WHERE pi.purchase.id = :purchaseId")
+	Double sumAmountByPurchaseId(@Param("purchaseId") Long purchaseId);
+
 	@Query("SELECT pi FROM PurchaseItemEntity pi WHERE pi.product.id = :productId AND pi.purchase.archived = false")
 	List<PurchaseItemEntity> findActiveByProductId(@Param("productId") Long productId);
 }

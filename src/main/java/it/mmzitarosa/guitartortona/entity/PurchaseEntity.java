@@ -21,7 +21,7 @@ public abstract class PurchaseEntity extends StatusEntity {
 	private Double amount;
 	private String notes;
 
-	@Exclude @OneToMany(mappedBy = "purchase") private List<PurchaseItemEntity> items = new ArrayList<>();
+	@Exclude @OneToMany(mappedBy = "purchase") @OrderBy("id ASC") private List<PurchaseItemEntity> items = new ArrayList<>();
 
 	//TODO: Aggiungere documento allegato
 }

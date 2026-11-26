@@ -1,7 +1,11 @@
 package it.mmzitarosa.guitartortona.security;
 
+import it.mmzitarosa.guitartortona.controller.CustomerController;
 import it.mmzitarosa.guitartortona.controller.IncomingInvoiceController;
 import it.mmzitarosa.guitartortona.controller.LedgerController;
+import it.mmzitarosa.guitartortona.controller.UsedReceiptController;
+import it.mmzitarosa.guitartortona.service.CustomerService;
+import it.mmzitarosa.guitartortona.service.UsedReceiptService;
 import it.mmzitarosa.guitartortona.service.IncomingInvoiceService;
 import it.mmzitarosa.guitartortona.service.PurchaseItemService;
 import it.mmzitarosa.guitartortona.service.LedgerService;
@@ -37,8 +41,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SecurityConfigTest {
 
 	@Configuration @EnableWebMvc @EnableSpringDataWebSupport
-	@org.springframework.context.annotation.Import({SecurityConfig.class, LedgerController.class, IncomingInvoiceController.class})
+	@org.springframework.context.annotation.Import({SecurityConfig.class, LedgerController.class, IncomingInvoiceController.class, UsedReceiptController.class, CustomerController.class})
 	static class TestConfig {
+		@Bean UsedReceiptService usedReceiptService() { return Mockito.mock(UsedReceiptService.class); }
+		@Bean CustomerService customerService() { return Mockito.mock(CustomerService.class); }
 		@Bean LedgerService ledgerService() { return Mockito.mock(LedgerService.class); }
 		@Bean PurchaseItemService purchaseItemService() { return Mockito.mock(PurchaseItemService.class); }
 		@Bean IncomingInvoiceService incomingInvoiceService() { return Mockito.mock(IncomingInvoiceService.class); }
@@ -88,6 +94,20 @@ class SecurityConfigTest {
 	@Test void userCanArchiveInvoice() throws Exception {
 		mvc.perform(patch("/api/v1/incomingInvoice/1/archive").with(withRole(Roles.USER))).andExpect(status().isNoContent());
 		mvc.perform(patch("/api/v1/incomingInvoice/1/archive").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+	}
+
+	@Test void viewerCannotReadReceiptsAndCustomers() throws Exception {
+		mvc.perform(get("/api/v1/usedReceipts").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+		mvc.perform(get("/api/v1/usedReceipt/1").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+		mvc.perform(get("/api/v1/customers").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+		mvc.perform(get("/api/v1/customers").with(withRole(Roles.USER))).andExpect(status().isOk());
+	}
+
+	@Test void archivedReceiptsAndRestoreAreAdminOnly() throws Exception {
+		mvc.perform(get("/api/v1/archive/usedReceipts").with(withRole(Roles.USER))).andExpect(status().isForbidden());
+		mvc.perform(patch("/api/v1/usedReceipt/1/restore").with(withRole(Roles.USER))).andExpect(status().isForbidden());
+		mvc.perform(get("/api/v1/archive/usedReceipts").with(withRole(Roles.ADMIN))).andExpect(status().isOk());
+		mvc.perform(patch("/api/v1/usedReceipt/1/restore").with(withRole(Roles.ADMIN))).andExpect(status().is2xxSuccessful());
 	}
 
 	@Test void userCanReadLedger() throws Exception {

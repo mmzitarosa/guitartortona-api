@@ -10,7 +10,7 @@ import java.util.Set;
 
 /**
  * Storia di un prodotto già pronta da mostrare, dalla voce più recente. Costi, fatture e utenti sono valorizzati
- * solo per chi può vederli.
+ * solo per chi può vederli. Un acquisto proviene da una fattura (invoice*) o da una ricevuta dell'usato (receipt*).
  */
 public record ProductTimelineDTO(int purchased, int sold, List<Entry> entries) {
 
@@ -41,6 +41,8 @@ public record ProductTimelineDTO(int purchased, int sold, List<Entry> entries) {
 			Long invoiceId,
 			String invoiceNumber,
 			String supplier,
+			Long receiptId,
+			String receiptNumber,
 			Set<String> superseded,
 			List<FieldChange> changes
 	) {}

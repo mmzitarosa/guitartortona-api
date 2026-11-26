@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 
+import static it.mmzitarosa.guitartortona.utils.Constant.MovementType;
+import static it.mmzitarosa.guitartortona.utils.Constant.PaymentMethod;
 import static it.mmzitarosa.guitartortona.utils.Constant.Status;
 
 @RequiredArgsConstructor
@@ -52,6 +54,24 @@ public class LedgerService {
 		ledgerEntry = repository.save(ledgerEntry);
 		// Converto l'entity del record in DTO
 		return LedgerEntryDTO.of(ledgerEntry);
+	}
+
+	/**
+	 * Helper: riga di brogliaccio generata automaticamente da un altro documento (resta PENDING finché non viene verificata)
+	 */
+	protected void createAutoEntry(LocalDate date, String invoiceNumber, LocalDate invoiceDate, String description, String reason,
+								   PaymentMethod paymentMethod, MovementType movementType, Double amount) {
+		LedgerEntryEntity ledgerEntry = new LedgerEntryEntity();
+		ledgerEntry.setDate(date);
+		ledgerEntry.setInvoiceNumber(invoiceNumber);
+		ledgerEntry.setInvoiceDate(invoiceDate);
+		ledgerEntry.setDescription(description);
+		ledgerEntry.setReason(reason);
+		ledgerEntry.setPaymentMethod(paymentMethod);
+		ledgerEntry.setMovementType(movementType);
+		ledgerEntry.setAmount(amount);
+		ledgerEntry.setStatus(Status.PENDING);
+		repository.save(ledgerEntry);
 	}
 
 	public LedgerEntryDTO readLedgerEntry(long id) {

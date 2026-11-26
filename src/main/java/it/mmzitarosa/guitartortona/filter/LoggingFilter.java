@@ -38,6 +38,8 @@ public class LoggingFilter extends OncePerRequestFilter {
 	private static final String MASK = "[REDACTED]";
 	private static final Set<String> SENSITIVE_HEADERS = Set.of("authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "x-auth-token");
 	private static final Pattern SENSITIVE_PARAM = Pattern.compile("(?i).*(password|passwd|secret|token|key|authorization).*");
+	/** Ricevute dell'usato e anagrafica clienti contengono dati personali: i body non vanno nei log */
+	private static final Pattern SENSITIVE_URI = Pattern.compile("/(usedReceipts?|customers?)(/|$)");
 
 	@Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
 		boolean traced = request.getRequestURI().startsWith("/api");
@@ -76,9 +78,9 @@ public class LoggingFilter extends OncePerRequestFilter {
 			log.debug("[TRACING] [DETAIL] [HTTP] - TraceId={} - RequestHeaders={} - RequestBody={} - ResponseHeaders={} - ResponseBody={}",
 					MDC.get("traceId"),
 					maskedHeaders(Collections.list(request.getHeaderNames()), request::getHeader),
-					body(request.getContentAsByteArray(), request.getContentType(), request.getCharacterEncoding()),
+					body(request.getRequestURI(), request.getContentAsByteArray(), request.getContentType(), request.getCharacterEncoding()),
 					maskedHeaders(response.getHeaderNames(), response::getHeader),
-					body(response.getContentAsByteArray(), response.getContentType(), response.getCharacterEncoding()));
+					body(request.getRequestURI(), response.getContentAsByteArray(), response.getContentType(), response.getCharacterEncoding()));
 		}
 	}
 
@@ -105,7 +107,8 @@ public class LoggingFilter extends OncePerRequestFilter {
 	}
 
 	/** Solo body testuali (JSON/testo), troncati: niente HTML renderizzato ne' contenuti binari. */
-	private String body(byte[] buf, String contentType, String charset) {
+	private String body(String uri, byte[] buf, String contentType, String charset) {
+		if (SENSITIVE_URI.matcher(uri).find()) return "[" + MASK + "]";
 		if (buf == null || buf.length == 0) return "[empty]";
 		String type = contentType == null ? "" : contentType.toLowerCase();
 		if (!type.contains("json") && !type.startsWith("text/plain")) return "[" + (type.isEmpty() ? "unknown" : type) + " omitted, " + buf.length + " bytes]";

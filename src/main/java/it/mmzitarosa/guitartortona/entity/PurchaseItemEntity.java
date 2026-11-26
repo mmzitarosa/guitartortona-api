@@ -13,6 +13,8 @@ public class PurchaseItemEntity extends DateEntity {
 	private Double vat;
 	@Column(name = "purchase_price") private Double purchasePrice;
 	private Integer quantity;
+	/** Solo ricevute dell'usato: assegnata alla Registra, stabile anche se altre righe vengono rimosse */
+	private String letter;
 
 	@ManyToOne @JoinColumn(name = "purchase_id") private PurchaseEntity purchase;
 	@ManyToOne @JoinColumn(name = "product_id") private ProductEntity product;

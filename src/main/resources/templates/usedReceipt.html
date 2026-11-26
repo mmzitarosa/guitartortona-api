@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Ricevuta Usato</title>
+    <style>
+        /*
+         * Il layout è stato disegnato su una pagina di 1190 x 1683 punti: --u è la misura di un punto
+         * espressa in mm, così la pagina è esattamente un A4 (210 x 297 mm) e ogni quota resta proporzionale.
+         */
+        :root {
+            --u: calc(210mm / 1190);
+        }
+
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        @font-face {
+            font-family: 'Code';
+            src: local('Code'), url('/fonts/Code39.ttf') format('truetype');
+        }
+
+        @media print {
+            * {
+                -webkit-print-color-adjust: exact !important; /* Chrome, Safari */
+                color-adjust: exact !important; /* Firefox */
+            }
+        }
+
+        /* A video (anteprima) le due pagine sono affiancate; in stampa restano una per foglio */
+        @media screen {
+            body {
+                display: flex;
+                width: 420mm;
+            }
+
+            .pagina + .pagina {
+                border-left: 1px solid #cccccc;
+            }
+        }
+
+        /* == Pagina == */
+        body {
+            margin: 0;
+            font-family: serif;
+            font-size: calc(24 * var(--u));
+            color: #333333;
+        }
+
+        .pagina {
+            position: relative;
+            box-sizing: border-box;
+            width: 210mm;
+            height: 297mm;
+            padding: calc(112 * var(--u));
+            overflow: hidden;
+        }
+
+        .pagina:not(:last-child) {
+            break-after: page;
+        }
+
+        /* == Pagina 2: informativa privacy == */
+        .pagina--informativa {
+            padding: calc(70 * var(--u)) calc(96 * var(--u));
+            font-size: calc(21 * var(--u));
+            line-height: 1.25;
+            text-align: justify;
+        }
+
+        .pagina--informativa h2 {
+            margin: 0 0 calc(8 * var(--u));
+            font-size: calc(26 * var(--u));
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .pagina--informativa h2 small {
+            display: block;
+            font-size: calc(21 * var(--u));
+            font-weight: normal;
+            text-transform: none;
+        }
+
+        .pagina--informativa p {
+            margin: 0 0 calc(7 * var(--u));
+        }
+
+        .informativa__elenco {
+            margin: 0 0 calc(6 * var(--u));
+            padding-left: calc(30 * var(--u));
+        }
+
+        .informativa__elenco > li {
+            margin-bottom: calc(7 * var(--u));
+        }
+
+        .informativa__elenco ul {
+            margin: calc(2 * var(--u)) 0 0;
+            padding-left: calc(26 * var(--u));
+            list-style: lower-alpha;
+        }
+
+        .informativa__elenco strong {
+            display: block;
+        }
+
+        .consenso {
+            margin-top: calc(22 * var(--u));
+            padding-top: calc(14 * var(--u));
+            border-top: calc(2 * var(--u)) solid #333333;
+        }
+
+        .consenso__scelte {
+            display: flex;
+            justify-content: center;
+            gap: calc(110 * var(--u));
+            margin: calc(8 * var(--u)) 0;
+            font-weight: bold;
+        }
+
+        .consenso__scelta::before {
+            content: '';
+            display: inline-block;
+            box-sizing: border-box;
+            width: calc(18 * var(--u));
+            height: calc(18 * var(--u));
+            margin-right: calc(8 * var(--u));
+            border: calc(2 * var(--u)) solid #333333;
+            border-radius: 50%;
+            vertical-align: -1px;
+        }
+
+        .consenso__firme {
+            display: flex;
+            justify-content: space-between;
+            gap: calc(40 * var(--u));
+            margin-top: calc(40 * var(--u));
+            font-weight: bold;
+        }
+
+        .consenso__firme span {
+            display: inline-block;
+            height: calc(28 * var(--u));
+            vertical-align: bottom;
+            border-bottom: calc(2 * var(--u)) solid #333333;
+        }
+
+        /* == Testata == */
+        .codice-a-barre {
+            position: absolute;
+            top: calc(57 * var(--u));
+            right: calc(92 * var(--u));
+            margin: 0;
+            font-family: Code;
+        }
+
+        .numero {
+            margin: 0;
+            font-size: calc(20 * var(--u));
+        }
+
+        .titolo {
+            box-sizing: content-box;
+            width: calc(846 * var(--u));
+            height: calc(34 * var(--u));
+            margin: calc(92 * var(--u)) 0 0 calc(50% - 429 * var(--u));
+            border: double #333333 calc(6 * var(--u));
+            font-size: calc(32 * var(--u));
+            line-height: calc(36 * var(--u));
+            text-align: center;
+        }
+
+        .separatore {
+            height: calc(16 * var(--u));
+            margin: calc(92 * var(--u)) 0 0;
+            font-size: calc(34 * var(--u));
+            line-height: calc(26 * var(--u));
+            text-align: center;
+        }
+
+        /* == Dati: sottoscritto a sinistra, destinatario a destra == */
+        .dati {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            height: calc(308 * var(--u));
+            margin-top: calc(84 * var(--u));
+        }
+
+        .sottoscritto {
+            flex: none;
+            width: calc(666 * var(--u));
+            overflow: hidden;
+        }
+
+        .sottoscritto p {
+            margin: 0;
+            white-space: nowrap;
+        }
+
+        .sottoscritto .data {
+            margin-bottom: 6lh;
+        }
+
+        /* Campo compilato: occupa la larghezza di --n caratteri "_" (12 punti l'uno) ed è sottolineato */
+        .campo {
+            display: inline-block;
+            vertical-align: bottom;
+            box-sizing: border-box;
+            width: calc(var(--n) * 12 * var(--u));
+            padding-left: calc(8 * var(--u));
+            height: calc(28 * var(--u));
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .destinatario {
+            font-style: normal;
+        }
+
+        /* == Dichiarazione == */
+        .dichiara {
+            margin: calc(92 * var(--u)) 0 0;
+            font-size: calc(32 * var(--u));
+            line-height: calc(18 * var(--u));
+            text-align: center;
+        }
+
+        .normativa {
+            margin: calc(72 * var(--u)) 0 0;
+        }
+
+        /* == Prodotti: una riga sottolineata per prodotto, prezzo a destra == */
+        .prodotti {
+            margin: 0;
+            padding: 1lh 0 0;
+            list-style: none;
+        }
+
+        .prodotto {
+            position: relative;
+            margin-bottom: calc(6 * var(--u));
+            width: calc(940 * var(--u));
+            height: calc(28 * var(--u));
+            text-transform: uppercase;
+        }
+
+        .prodotto__descrizione {
+            display: block;
+            width: calc(800 * var(--u));
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .prodotto__prezzo {
+            position: absolute;
+            top: 0;
+            right: calc(-1 * var(--u));
+        }
+
+        .sottolineato {
+            background: url('/images/bg_sottolineato.png') repeat-x 0 calc(24 * var(--u));
+        }
+
+        /* == Totale e firma: posizionati in assoluto, sempre alla stessa quota == */
+        .totale {
+            position: absolute;
+            top: calc(1324 * var(--u));
+            margin: 0;
+        }
+
+        .firma {
+            position: absolute;
+            top: calc(1432 * var(--u));
+            left: calc(595 * var(--u));
+            width: calc(483 * var(--u));
+            overflow: hidden;
+            text-align: center;
+        }
+
+        .firma p {
+            margin: 0;
+        }
+
+        .firma .firma__linea {
+            margin-top: 3lh;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Pagina 1: dichiarazione di compravendita -->
+<main class="pagina">
+    <p class="codice-a-barre" th:text="'*' + ${receipt.internalCode} + '*'">*G000000R*</p>
+    <p class="numero">N°________</p>
+    <h1 class="titolo">DICHIARAZIONE DI COMPRAVENDITA DI BENI USATI</h1>
+    <p class="separatore">***</p>
+
+    <section class="dati">
+        <div class="sottoscritto">
+            <p class="data">Tortona,&nbsp;<span th:text="${receipt.date}">26 novembre 2026</span></p>
+            <p>Il&nbsp;Sottoscritto&nbsp;<span class="campo sottolineato" style="--n: 50" th:text="${receipt.customerName}"></span></p>
+            <p>Residente&nbsp;in&nbsp;<span class="campo sottolineato" style="--n: 47" th:text="${receipt.customer?.address}"></span></p>
+            <p>C.A.P.&nbsp;<span class="campo sottolineato" style="--n: 7" th:text="${receipt.customer?.zipCode}"></span>&nbsp;Città&nbsp;<span class="campo sottolineato" style="--n: 27" th:text="${receipt.customer?.city}"></span>&nbsp;Prov.&nbsp;<span class="campo sottolineato" style="--n: 8" th:text="${receipt.customer?.province}"></span></p>
+            <p>Documento&nbsp;<span class="campo sottolineato" style="--n: 53" th:text="${receipt.customerDocument}"></span></p>
+        </div>
+        <address class="destinatario">
+            Spett.le<br/>
+            Guitar di Zitarosa R.&amp;C. S.n.c.<br/>
+            Strada Ribrocca n. 2/a<br/>
+            15057 TORTONA (AL)<br/>
+            P.iva : 01312460064
+        </address>
+    </section>
+
+    <h2 class="dichiara">DICHIARA</h2>
+    <p class="normativa">
+        Ai Sensi e per gli effetti del D.L. 23.02.1995, n. 41, convertito in L. 22 Marzo 1995, n. 85, di aver
+        ceduto in data odierna alla Vs Società i seguenti beni usati, da me posseduti in piena proprietà e
+        liberi da ogni vincolo:
+    </p>
+
+    <ul class="prodotti">
+        <li class="prodotto sottolineato" th:each="item : ${receipt.items}">
+            <span class="prodotto__descrizione"
+                  th:text="${item.letter} + ') [' + ${item.internalCode} + '] ' + ${item.category} + ' ' + ${item.brand} + ' ' + ${item.description}">A) [GU000000N] Categoria Marca Descrizione</span>
+            <span class="prodotto__prezzo"
+                  th:text="'€ ' + ${#numbers.formatDecimal(item.amount, 1, 'POINT', 2, 'COMMA')}">€ 0,00</span>
+        </li>
+    </ul>
+
+    <p class="totale">Al prezzo di:
+        <span class="sottolineato" th:text="'€ ' + ${#numbers.formatDecimal(receipt.amount, 1, 'POINT', 2, 'COMMA')}">€ 0,00</span>
+    </p>
+
+    <footer class="firma">
+        <p>In fede</p>
+        <p class="firma__linea">_____________________________________________________________________________________________________________________________________________</p>
+    </footer>
+</main>
+
+<!-- Pagina 2: informativa privacy (artt. 13-14 Reg. UE 2016/679) e consenso -->
+<!-- Versione precedente, immagine a piena pagina: sostituire l'<aside> sottostante con
+<aside class="pagina pagina--informativa pagina--immagine" role="note" aria-label="Informativa privacy"></aside>
+e ripristinare in CSS:
+.pagina--immagine {
+    padding: 0;
+    background: url('/images/privacy.jpg') no-repeat top left / 100% 100%;
+}
+-->
+<aside class="pagina pagina--informativa" role="note" aria-label="Informativa privacy">
+    <h2>Informativa sul trattamento dei dati personali
+        <small>ai sensi degli artt. 13 e 14 del Regolamento (UE) 2016/679 (&laquo;GDPR&raquo;)</small></h2>
+    <p>Guitar di Zitarosa R.&amp;C. S.n.c. La informa che i dati personali da Lei forniti in occasione della cessione di beni usati
+        saranno trattati nel rispetto del GDPR e del D.Lgs. 196/2003 (come modificato dal D.Lgs. 101/2018), secondo quanto segue.</p>
+    <ol class="informativa__elenco">
+        <li><strong>Titolare del trattamento</strong>
+            Guitar di Zitarosa R.&amp;C. S.n.c., Strada Ribrocca n. 2/a, 15057 Tortona (AL), P.IVA 01312460064. Le richieste
+            relative ai Suoi dati possono essere presentate al Titolare presso la sede indicata. Non è stato designato un
+            Responsabile della protezione dei dati (DPO), non essendo obbligatorio.</li>
+        <li><strong>Dati trattati</strong>
+            Dati anagrafici, residenza, estremi del documento di identità, codice fiscale, descrizione dei beni ceduti e
+            corrispettivo pattuito. Non sono richieste categorie particolari di dati (art. 9 GDPR).</li>
+        <li><strong>Finalità e basi giuridiche del trattamento</strong>
+            <ul>
+                <li>esecuzione del contratto di acquisto dei beni usati e gestione dell'operazione (art. 6, par. 1, lett. b);</li>
+                <li>adempimento degli obblighi di legge: registro delle operazioni sulle cose usate (art. 128 TULPS), obblighi
+                    fiscali e contabili, richieste delle Autorità (art. 6, par. 1, lett. c);</li>
+                <li>tutela dei diritti del Titolare, anche in sede giudiziaria, e verifica della provenienza dei beni a
+                    prevenzione di illeciti (art. 6, par. 1, lett. f &ndash; legittimo interesse);</li>
+                <li>solo se acconsente, invio di comunicazioni commerciali e promozionali (art. 6, par. 1, lett. a).</li>
+            </ul></li>
+        <li><strong>Natura del conferimento</strong>
+            Il conferimento dei dati per le finalità a), b) e c) è necessario: l'eventuale rifiuto rende impossibile
+            concludere l'operazione. Il consenso per la finalità d) è facoltativo e non condiziona l'acquisto.</li>
+        <li><strong>Modalità del trattamento</strong>
+            Il trattamento avviene con strumenti cartacei e informatici, con misure di sicurezza adeguate, da personale
+            autorizzato. Non è effettuata alcuna profilazione né processo decisionale automatizzato.</li>
+        <li><strong>Destinatari dei dati</strong>
+            Soggetti che forniscono servizi informatici e gestionali, consulenti fiscali e contabili (nominati responsabili del
+            trattamento ove necessario), Autorità di pubblica sicurezza, fiscali e giudiziarie nei casi previsti dalla legge.
+            I dati non sono oggetto di diffusione.</li>
+        <li><strong>Trasferimento dei dati extra UE</strong>
+            I dati non sono trasferiti verso paesi terzi; ove ciò avvenisse, sarebbe solo con le garanzie previste dagli
+            artt. 44 e seguenti del GDPR.</li>
+        <li><strong>Periodo di conservazione</strong>
+            I dati sono conservati per 10 anni dalla data dell'operazione (art. 2220 c.c.), salvo obblighi di conservazione
+            più lunghi o necessità di tutela giudiziaria; i dati per finalità commerciali fino alla revoca del consenso.
+            Decorsi i termini i dati sono cancellati o resi anonimi.</li>
+        <li><strong>Diritti dell'interessato</strong>
+            Ha diritto di ottenere dal Titolare l'accesso ai dati, la rettifica, la cancellazione, la limitazione del trattamento,
+            la portabilità dei dati e di opporsi al trattamento (artt. 15-22 GDPR), nonché di revocare in qualsiasi momento il
+            consenso, senza pregiudicare la liceità del trattamento precedente. Ha inoltre diritto di proporre reclamo al
+            Garante per la protezione dei dati personali (www.garanteprivacy.it).</li>
+    </ol>
+
+    <section class="consenso">
+        <h2>Presa visione e consenso al trattamento</h2>
+        <p>Il sottoscritto, presa visione dell'informativa che precede, ne dichiara ricevuta copia e consapevole del trattamento dei
+            propri dati personali per le finalità a), b) e c), per le quali non è richiesto il consenso.</p>
+        <p>Con riferimento alla finalità d) (comunicazioni commerciali e promozionali su prodotti e servizi di Guitar):</p>
+        <div class="consenso__scelte">
+            <span class="consenso__scelta">Esprimo il consenso</span>
+            <span class="consenso__scelta">Nego il consenso</span>
+        </div>
+        <div class="consenso__firme">
+            <div>Tortona, lì <span style="width: calc(240 * var(--u))" th:text="${receipt.date}"></span></div>
+            <div>Firma dell'interessato <span style="width: calc(340 * var(--u))"></span></div>
+        </div>
+    </section>
+</aside>
+
+</body>
+</html>

@@ -62,10 +62,11 @@ public class SecurityConfig {
 						// Il registro di audit si consulta solo da admin
 						.requestMatchers(HttpMethod.GET, "/api/v1/audit/**").hasRole(Roles.ADMIN)
 						// Le fatture archiviate (eliminate) e il loro ripristino sono riservati agli admin
-						.requestMatchers(HttpMethod.GET, "/api/v1/archive/incomingInvoices").hasRole(Roles.ADMIN)
-						.requestMatchers(HttpMethod.PATCH, "/api/v1/incomingInvoice/*/restore").hasRole(Roles.ADMIN)
-						// Fatture e brogliaccio contengono costi: vietati ai viewer
+						.requestMatchers(HttpMethod.GET, "/api/v1/archive/incomingInvoices", "/api/v1/archive/usedReceipts").hasRole(Roles.ADMIN)
+						.requestMatchers(HttpMethod.PATCH, "/api/v1/incomingInvoice/*/restore", "/api/v1/usedReceipt/*/restore").hasRole(Roles.ADMIN)
+						// Fatture, ricevute dell'usato, anagrafica clienti e brogliaccio contengono costi o dati personali: vietati ai viewer
 						.requestMatchers(HttpMethod.GET, "/api/v1/incomingInvoice/**", "/api/v1/incomingInvoices", "/api/v1/archive/**",
+								"/api/v1/usedReceipt/**", "/api/v1/usedReceipts", "/api/v1/customers",
 								"/api/v1/ledger/**", "/api/v1/ledgerEntry/**").hasAnyRole(Roles.USER, Roles.ADMIN)
 						.requestMatchers(HttpMethod.GET, "/api/v1/**").hasAnyRole(Roles.VIEWER, Roles.USER, Roles.ADMIN)
 						.requestMatchers(HttpMethod.DELETE, "/api/v1/**").hasRole(Roles.ADMIN)
