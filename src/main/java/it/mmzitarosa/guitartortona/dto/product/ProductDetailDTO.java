@@ -12,6 +12,7 @@ public record ProductDetailDTO(
 		Long id,
 		String code,
 		String internalCode,
+		String usedReference,
 		BrandDTO brand,
 		CategoryDTO category,
 		String description,
@@ -22,11 +23,13 @@ public record ProductDetailDTO(
 		Integer pendingStock,
 		List<SaleDTO> sales
 ) {
-	public static ProductDetailDTO of(ProductEntity entity) {
+	/** {@code usedReference}: "numero/anno lettera" del prodotto usato registrato, null altrimenti. */
+	public static ProductDetailDTO of(ProductEntity entity, String usedReference) {
 		return new ProductDetailDTO(
 				entity.getId(),
 				entity.getCode(),
 				entity.getInternalCode(),
+				usedReference,
 				BrandDTO.of(entity.getBrand()),
 				CategoryDTO.of(entity.getCategory()),
 				entity.getDescription(),

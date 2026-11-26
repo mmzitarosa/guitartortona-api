@@ -12,6 +12,12 @@ import it.mmzitarosa.guitartortona.entity.BrandEntity;
 import it.mmzitarosa.guitartortona.entity.CategoryEntity;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
 import it.mmzitarosa.guitartortona.repository.ProductRepository;
+import it.mmzitarosa.guitartortona.repository.UsedReceiptRepository;
+import it.mmzitarosa.guitartortona.entity.UsedReceiptEntity;
+import org.hibernate.Hibernate;
+import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import it.mmzitarosa.guitartortona.security.CurrentUser;
 import it.mmzitarosa.guitartortona.specification.ProductSpecification;
 import it.mmzitarosa.guitartortona.specification.ProductVisibilitySpecification;
@@ -28,7 +34,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProductService {
 
 	/* == CONSTANTS == */
+	private static final Pattern USED_RECEIPT_REFERENCE = Pattern.compile("^(\\d+)/(\\d{2})\\s+([A-Za-z]+)$");
 	private final ProductRepository repository;
+	private final UsedReceiptRepository usedReceiptRepository;
 	private final CategoryService categoryService;
 	private final BrandService brandService;
 	private final CurrentUser currentUser;
@@ -36,9 +44,9 @@ public class ProductService {
 	/**
 	 * GET /products
 	 */
-	@Transactional(readOnly = true) public PageDTO<ProductListDTO> getProducts(String search, String description, Long categoryId, Long brandId, boolean available, int page, int size, Sort sort) {
+	@Transactional(readOnly = true) public PageDTO<ProductListDTO> getProducts(String search, String description, Long categoryId, Long brandId, ProductCondition condition, boolean available, int page, int size, Sort sort) {
 		Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100), sort);
-		Specification<ProductEntity> spec = ProductSpecification.withFilters(search, description, categoryId == null ? null : categoryService.getCategoryAndDescendantIds(categoryId), brandId, available);
+		Specification<ProductEntity> spec = ProductSpecification.withFilters(search, description, categoryId == null ? null : categoryService.getCategoryAndDescendantIds(categoryId), brandId, condition, available);
 		if (!currentUser.isAdmin())
 			spec = spec.and(ProductVisibilitySpecification.notOnlyInArchivedPurchases());
 		return PageDTO.of(repository.findAll(spec, pageable).map(ProductListDTO::of));
@@ -49,17 +57,39 @@ public class ProductService {
 	 */
 	@Transactional(readOnly = true) public ProductDetailDTO getProductDetail(Long id) {
 		ProductEntity product = getProduct(id);
-		return ProductDetailDTO.of(product);
+		return detail(product);
+	}
+
+	/** Il riferimento di un prodotto usato (es. 1/26 A) è riservato a user e admin. */
+	private ProductDetailDTO detail(ProductEntity product) {
+		String reference = null;
+		if (currentUser.canSeeCosts()) {
+			reference = product.getPurchaseItems().stream()
+					.filter(i -> !i.getPurchase().isArchived())
+					.map(i -> Hibernate.unproxy(i.getPurchase()) instanceof UsedReceiptEntity receipt ? receipt.getItemReference(i.getLetter()) : null)
+					.filter(Objects::nonNull).findFirst().orElse(null);
+		}
+		return ProductDetailDTO.of(product, reference);
 	}
 
 	/**
 	 * GET /product?code={code}
+	 * Oltre a codice e codice interno accetta il riferimento di una ricevuta dell'usato (es. 1/26 A), riservato a user e admin.
 	 */
 	@Transactional(readOnly = true) public ProductDetailDTO getProductDetailByCode(String code) {
+		Matcher reference = USED_RECEIPT_REFERENCE.matcher(code.trim());
+		if (reference.matches()) {
+			if (!currentUser.canSeeCosts())
+				throw new NotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + code);
+			return detail(usedReceiptRepository.findProductByReference(Integer.parseInt(reference.group(1)), 2000 + Integer.parseInt(reference.group(2)), reference.group(3))
+					.filter(this::isVisible)
+					.orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + code)));
+		}
+
 		ProductEntity product = repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(code, code)
 				.filter(this::isVisible)
 				.orElseThrow(() -> new NotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + code));
-		return ProductDetailDTO.of(product);
+		return detail(product);
 	}
 
 	/**
@@ -103,6 +133,24 @@ public class ProductService {
 			existing = repository.findByCodeIgnoreCaseOrInternalCodeIgnoreCase(input.code(), input.code()).orElse(null);
 
 		return existing != null ? updateProduct(existing, input) : createNewProduct(input, condition);
+	}
+
+	/**
+	 * Helper: Crea prodotto usato (nessun codice produttore, nessun punto di riordino)
+	 */
+	protected ProductEntity createUsedProduct(ProductInput input) {
+		return createNewProduct(forUsed(input), ProductCondition.USED);
+	}
+
+	/**
+	 * Helper: Modifica prodotto usato
+	 */
+	protected ProductEntity updateUsedProduct(ProductEntity product, ProductInput input) {
+		return updateProduct(product, forUsed(input));
+	}
+
+	private ProductInput forUsed(ProductInput input) {
+		return new ProductInput(input.id(), null, input.category(), input.brand(), input.description(), input.price(), null, input.notes());
 	}
 
 	/**

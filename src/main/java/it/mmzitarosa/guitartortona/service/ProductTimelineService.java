@@ -7,6 +7,7 @@ import it.mmzitarosa.guitartortona.entity.AuditLogEntity;
 import it.mmzitarosa.guitartortona.entity.IncomingInvoiceEntity;
 import it.mmzitarosa.guitartortona.entity.PurchaseItemEntity;
 import it.mmzitarosa.guitartortona.entity.SaleEntity;
+import it.mmzitarosa.guitartortona.entity.UsedReceiptEntity;
 import it.mmzitarosa.guitartortona.exception.NotFoundException;
 import it.mmzitarosa.guitartortona.repository.AuditLogRepository;
 import it.mmzitarosa.guitartortona.repository.ProductRepository;
@@ -106,10 +107,12 @@ public class ProductTimelineService {
 	private List<Entry> purchaseEntries(PurchaseItemEntity item, List<AuditLogEntity> updates, boolean full, boolean admin) {
 		Object purchase = Hibernate.unproxy(item.getPurchase());
 		IncomingInvoiceEntity invoice = purchase instanceof IncomingInvoiceEntity i ? i : null;
-		boolean showInvoice = full;
-		Long invoiceId = showInvoice ? item.getPurchase().getId() : null;
-		String number = showInvoice && invoice != null ? invoice.getNumber() : null;
-		String supplier = showInvoice && invoice != null && invoice.getSupplier() != null ? invoice.getSupplier().getName() : null;
+		UsedReceiptEntity receipt = purchase instanceof UsedReceiptEntity r ? r : null;
+		Long invoiceId = full && receipt == null ? item.getPurchase().getId() : null;
+		String number = full && invoice != null ? invoice.getNumber() : null;
+		String supplier = full && invoice != null && invoice.getSupplier() != null ? invoice.getSupplier().getName() : null;
+		Long receiptId = full && receipt != null ? receipt.getId() : null;
+		String receiptNumber = full && receipt != null ? receipt.getReference() : null;
 		String status = item.getPurchase().getStatus() == null ? null : item.getPurchase().getStatus().name();
 
 		// Valore originale di ogni campo: il precedente della prima modifica, altrimenti quello attuale
@@ -143,7 +146,7 @@ public class ProductTimelineService {
 		result.add(Entry.builder().type(PURCHASE).date(item.getPurchase().getDate()).quantity(integer(original.get(QUANTITY)))
 				.price(full ? number(original.get("purchasePrice")) : null).vat(full ? number(original.get("vat")) : null)
 				.notes(full ? item.getPurchase().getNotes() : null).status(status)
-				.invoiceId(invoiceId).invoiceNumber(number).supplier(supplier).superseded(allChanged).build());
+				.invoiceId(invoiceId).invoiceNumber(number).supplier(supplier).receiptId(receiptId).receiptNumber(receiptNumber).superseded(allChanged).build());
 
 		for (int i = 0; i < days.size(); i++) {
 			Day day = days.get(i);
@@ -156,7 +159,7 @@ public class ProductTimelineService {
 					.price(costChanged ? number(day.after().get("purchasePrice")) : null).vat(costChanged ? number(day.after().get("vat")) : null)
 					.previousPrice(priceChanged ? number(day.before().get("purchasePrice")) : null)
 					.previousVat(vatChanged ? number(day.before().get("vat")) : null)
-					.invoiceId(invoiceId).invoiceNumber(number).supplier(supplier).superseded(later).build());
+					.invoiceId(invoiceId).invoiceNumber(number).supplier(supplier).receiptId(receiptId).receiptNumber(receiptNumber).superseded(later).build());
 		}
 		return result;
 	}

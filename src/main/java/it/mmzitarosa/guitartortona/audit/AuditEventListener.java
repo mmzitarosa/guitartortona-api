@@ -35,7 +35,9 @@ public class AuditEventListener implements PostInsertEventListener, PostUpdateEv
 	public static final String DELETE = "DELETE";
 
 	// Campi gestiti automaticamente o dai trigger: non sono modifiche dell'utente
-	private static final Set<String> IGNORED_FIELDS = Set.of("id", "createdDate", "updatedDate", "stock", "stockPending");
+	private static final Set<String> IGNORED_FIELDS = Set.of("id", "createdDate", "updatedDate", "stock", "stockPending", "lastLetterIndex",
+			// Dati identificativi del venditore (anagrafica e copia sulla ricevuta): non vanno duplicati nel registro
+			"documentType", "documentNumber", "taxCode", "customerDocumentType", "customerDocumentNumber", "customerTaxCode");
 	// Codice interno generato dopo l'inserimento: non è una modifica dell'utente
 	private static final Set<String> GENERATED_FIELDS = Set.of("internalCode");
 

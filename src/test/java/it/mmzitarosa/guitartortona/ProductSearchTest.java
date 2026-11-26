@@ -66,7 +66,7 @@ class ProductSearchTest {
 	}
 
 	private List<Long> find(String search, String description, List<Long> categoryIds, Long brandId, boolean available) {
-		return repository.findAll(ProductSpecification.withFilters(search, description, categoryIds, brandId, available),
+		return repository.findAll(ProductSpecification.withFilters(search, description, categoryIds, brandId, null, available),
 						PageRequest.of(0, 15, search == null ? Sort.by("id") : Sort.by(Sort.Direction.DESC, "id")))
 				.map(ProductListDTO::of).map(ProductListDTO::id).getContent();
 	}
@@ -117,7 +117,7 @@ class ProductSearchTest {
 	}
 
 	@Test void countQueryIsConsistentWithPaging() {
-		var page = repository.findAll(ProductSpecification.withFilters("player", null, null, null, false), PageRequest.of(0, 1));
+		var page = repository.findAll(ProductSpecification.withFilters("player", null, null, null, null, false), PageRequest.of(0, 1));
 		assertEquals(2, page.getTotalElements());
 		assertEquals(1, page.getContent().size());
 	}
