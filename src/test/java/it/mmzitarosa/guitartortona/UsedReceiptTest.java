@@ -448,6 +448,7 @@ class UsedReceiptTest {
 		Long productId = receipt.items().get(0).product().id();
 
 		assertEquals("1/26 A", productService.getProductDetail(productId).usedReference());
+		assertEquals(receipt.id(), productService.getProductDetail(productId).usedReceiptId());
 		var purchase = timeline.getTimeline(productId).entries().stream().filter(e -> "PURCHASE".equals(e.type())).findFirst().orElseThrow();
 		assertEquals(receipt.id(), purchase.receiptId());
 		assertEquals("1/26", purchase.receiptNumber());
