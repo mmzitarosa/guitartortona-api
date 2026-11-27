@@ -262,6 +262,41 @@ class UsedReceiptTest {
 		assertTrue(products.findById(productId).isEmpty());
 	}
 
+	@Test void deletedReceiptNumberIsNeverReused() {
+		login(true);
+		UsedReceiptDetailDTO first = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+		service.archiveUsedReceipt(first.id());
+		service.deleteUsedReceipt(first.id());
+		em.flush();
+		em.clear();
+
+		UsedReceiptDetailDTO second = registered(LocalDate.of(2026, 2, 11), true, "Tele");
+		assertEquals("1/26", first.number());
+		assertEquals("2/26", second.number());
+	}
+
+	@Test void archivedReceiptProductsAreHiddenFromOperators() {
+		login(true);
+		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+		Long productId = receipt.items().get(0).product().id();
+		service.archiveUsedReceipt(receipt.id());
+		em.flush();
+		em.clear();
+
+		assertEquals(productId, productService.getProductDetail(productId).id());
+
+		login(false);
+		assertThrows(NotFoundException.class, () -> productService.getProductDetail(productId));
+		assertThrows(NotFoundException.class, () -> timeline.getTimeline(productId));
+
+		login(true);
+		service.restoreUsedReceipt(receipt.id());
+		em.flush();
+		em.clear();
+		login(false);
+		assertEquals(productId, productService.getProductDetail(productId).id());
+	}
+
 	@Test void printableFromPendingOnAndRendersTemplate() {
 		Long id = service.createUsedReceipt(receipt(LocalDate.of(2026, 2, 10), true)).id();
 		assertThrows(ConflictException.class, () -> service.getUsedReceiptPrint(id));
@@ -339,6 +374,7 @@ class UsedReceiptTest {
 
 	@Test void listShowsSaleDataAndMarginOnlyOnceSold() {
 		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato", "Tele");
+		em.flush();
 		var sold = products.findById(receipt.items().get(0).product().id()).orElseThrow();
 		SaleEntity sale = new SaleEntity();
 		sale.setProduct(sold);
