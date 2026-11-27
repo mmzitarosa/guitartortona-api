@@ -103,6 +103,18 @@ class SecurityConfigTest {
 		mvc.perform(get("/api/v1/customers").with(withRole(Roles.USER))).andExpect(status().isOk());
 	}
 
+	@Test void customerRegistryIsAdminOnly() throws Exception {
+		for (String role : new String[]{Roles.USER, Roles.VIEWER}) {
+			mvc.perform(get("/api/v1/customer/1").with(withRole(role))).andExpect(status().isForbidden());
+			mvc.perform(get("/api/v1/archive/customers").with(withRole(role))).andExpect(status().isForbidden());
+			mvc.perform(patch("/api/v1/customer/1/archive").with(withRole(role))).andExpect(status().isForbidden());
+			mvc.perform(patch("/api/v1/customer/1/restore").with(withRole(role))).andExpect(status().isForbidden());
+			mvc.perform(delete("/api/v1/customer/1").with(withRole(role))).andExpect(status().isForbidden());
+		}
+		mvc.perform(get("/api/v1/archive/customers").with(withRole(Roles.ADMIN))).andExpect(status().isOk());
+		mvc.perform(patch("/api/v1/customer/1/archive").with(withRole(Roles.ADMIN))).andExpect(status().isOk());
+	}
+
 	@Test void archivedReceiptsAndRestoreAreAdminOnly() throws Exception {
 		mvc.perform(get("/api/v1/archive/usedReceipts").with(withRole(Roles.USER))).andExpect(status().isForbidden());
 		mvc.perform(patch("/api/v1/usedReceipt/1/restore").with(withRole(Roles.USER))).andExpect(status().isForbidden());
