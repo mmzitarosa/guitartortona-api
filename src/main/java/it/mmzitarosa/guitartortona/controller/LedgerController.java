@@ -45,7 +45,15 @@ public class LedgerController {
 		return service.updateLedgerEntry(id, request);
 	}
 
-	/* == DELETE == */
+	@PatchMapping("/ledgerEntry/{id}/archive") public void archiveLedgerEntry(@PathVariable long id) {
+		service.archiveLedgerEntry(id);
+	}
+
+	@PatchMapping("/ledgerEntry/{id}/restore") public LedgerEntryDTO restoreLedgerEntry(@PathVariable long id) {
+		return service.restoreLedgerEntry(id);
+	}
+
+	/* == DELETE (fisica, solo admin e solo se già archiviata) == */
 	@DeleteMapping("/ledgerEntry/{id}") public void deleteLedgerEntry(@PathVariable long id) {
 		service.deleteLedgerEntry(id);
 	}

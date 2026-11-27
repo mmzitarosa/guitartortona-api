@@ -25,6 +25,7 @@ import static it.mmzitarosa.guitartortona.utils.Constant.*;
 	private String receiptNumber;			// Ultime 3 Cifre
 	private MovementType movementType;		// Entrata/Uscita
 	private Double amount;					// Importo in entrata/uscita da banca/cassa
+	private boolean archived;				// Eliminata (sola lettura)
 
 	public static LedgerEntryLightDTO of(LedgerEntryEntity entity) {
 		LedgerEntryLightDTO dto = new LedgerEntryLightDTO();
@@ -40,6 +41,7 @@ import static it.mmzitarosa.guitartortona.utils.Constant.*;
 		dto.setReceiptNumber(entity.getReceiptNumber());
 		dto.setMovementType(entity.getMovementType());
 		dto.setAmount(entity.getAmount());
+		dto.setArchived(entity.isArchived());
 		return dto;
 	}
 
