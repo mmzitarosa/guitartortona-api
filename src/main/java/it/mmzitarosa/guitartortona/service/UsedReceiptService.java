@@ -266,8 +266,9 @@ public class UsedReceiptService {
 	 * Helper: dettaglio con riga di brogliaccio collegata e, per l'admin, la differenza da allineare
 	 */
 	private UsedReceiptDetailDTO detail(UsedReceiptEntity receipt) {
-		Long ledgerEntryId = ledgerService.findByUsedReceipt(receipt.getId()).map(LedgerEntryEntity::getId).orElse(null);
-		return UsedReceiptDetailDTO.of(receipt, ledgerEntryId, pendingAlignment(receipt).orElse(null));
+		Optional<LedgerEntryEntity> row = ledgerService.findByUsedReceipt(receipt.getId());
+		return UsedReceiptDetailDTO.of(receipt, row.map(LedgerEntryEntity::getId).orElse(null),
+				row.map(LedgerEntryEntity::isArchived).orElse(false), pendingAlignment(receipt).orElse(null));
 	}
 
 	/**
