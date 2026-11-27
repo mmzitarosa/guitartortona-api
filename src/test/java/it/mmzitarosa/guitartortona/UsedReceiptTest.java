@@ -76,6 +76,7 @@ class UsedReceiptTest {
 
 	@MockitoBean CurrentUser currentUser;
 	@Autowired UsedReceiptService service;
+	@Autowired CustomerService customerService;
 	@Autowired PurchaseItemService itemService;
 	@Autowired ProductService productService;
 	@Autowired ProductTimelineService timeline;
@@ -103,8 +104,12 @@ class UsedReceiptTest {
 	}
 
 	private UsedReceiptInput receipt(LocalDate date, boolean withCustomer) {
+		return receipt(date, withCustomer, null);
+	}
+
+	private UsedReceiptInput receipt(LocalDate date, boolean withCustomer, Long customerId) {
 		CustomerInput customer = withCustomer
-				? new CustomerInput(null, "Mario", "Rossi", "Via Roma 1", "15057", "Tortona", "AL", "CI", "AB123", "RSSMRA80A01L304X")
+				? new CustomerInput(customerId, "Mario", "Rossi", "Via Roma 1", "15057", "Tortona", "AL", "CI", "AB123", "RSSMRA80A01L304X")
 				: null;
 		return new UsedReceiptInput(date, null, customer, false);
 	}
@@ -482,6 +487,59 @@ class UsedReceiptTest {
 		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
 		assertEquals(receipt.id(), service.getUsedReceiptDetailByCode(receipt.internalCode().toLowerCase()).id());
 		assertThrows(NotFoundException.class, () -> service.getUsedReceiptDetailByCode("G999999999R"));
+	}
+
+	@Test void customerRectificationLeavesRegisteredReceiptsUntouched() {
+		login(true);
+		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+		Long customerId = receipt.customer().id();
+
+		customerService.updateCustomer(customerId, new CustomerInput(null, "Luigi", "Bianchi", "Via Po 2", "15057", "Tortona", "AL", null, null, null));
+		em.flush();
+		em.clear();
+
+		assertEquals("Luigi", customerService.getCustomerDetail(customerId).firstName());
+		assertEquals("Mario", service.getUsedReceiptDetail(receipt.id()).customer().firstName());
+	}
+
+	@Test void archivedCustomerIsHiddenAndCannotBeChosenOrEdited() {
+		login(true);
+		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+		Long customerId = receipt.customer().id();
+
+		customerService.archiveCustomer(customerId);
+		em.flush();
+		em.clear();
+
+		assertTrue(customerService.getAllCustomers(false).stream().noneMatch(c -> c.id().equals(customerId)));
+		assertTrue(customerService.getAllCustomers(true).stream().anyMatch(c -> c.id().equals(customerId)));
+		assertThrows(ConflictException.class, () -> customerService.updateCustomer(customerId, new CustomerInput(null, "Luigi", "Bianchi", "Via Po 2", "15057", "Tortona", "AL", null, null, null)));
+		assertThrows(ConflictException.class, () -> service.createUsedReceipt(receipt(LocalDate.of(2026, 3, 1), true, customerId)));
+		// La ricevuta che lo ha già collegato resta modificabile
+		assertEquals(customerId, service.updateUsedReceipt(receipt.id(), input(receipt, LocalDate.of(2026, 2, 11))).customer().id());
+
+		assertEquals(customerId, customerService.restoreCustomer(customerId).id());
+		assertTrue(customerService.getAllCustomers(false).stream().anyMatch(c -> c.id().equals(customerId)));
+	}
+
+	@Test void customerIsDeletedPhysicallyOnlyIfArchivedAndReceiptsKeepTheirCopy() {
+		login(true);
+		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+		Long customerId = receipt.customer().id();
+
+		assertThrows(ConflictException.class, () -> customerService.deleteCustomer(customerId));
+		customerService.archiveCustomer(customerId);
+		em.flush();
+		em.clear();
+		customerService.deleteCustomer(customerId);
+		em.flush();
+		em.clear();
+
+		assertThrows(NotFoundException.class, () -> customerService.getCustomerDetail(customerId));
+		UsedReceiptDetailDTO after = service.getUsedReceiptDetail(receipt.id());
+		assertNull(after.customer().id());
+		assertEquals("Rossi", after.customer().lastName());
+		assertEquals("Tortona", after.customer().city());
 	}
 
 }

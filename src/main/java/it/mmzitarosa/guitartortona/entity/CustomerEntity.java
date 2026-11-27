@@ -2,10 +2,13 @@ package it.mmzitarosa.guitartortona.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
+
+import java.time.LocalDateTime;
 
 /** Anagrafica del venditore di materiale usato. Dati personali: visibili solo a user/admin. */
 @Entity @Table(name = "customer")
@@ -22,5 +25,15 @@ public class CustomerEntity extends DateEntity {
 	@Column(name = "document_type") private String documentType;
 	@Column(name = "document_number") private String documentNumber;
 	@Column(name = "tax_code") private String taxCode;
+	@Column(name = "archived_date") private LocalDateTime archivedDate;
+	private boolean archived;
+
+	@PreUpdate @Override protected void onUpdate() {
+		super.onUpdate();
+		if (!archived)
+			archivedDate = null;
+		else if (archivedDate == null)
+			archivedDate = updatedDate;
+	}
 
 }

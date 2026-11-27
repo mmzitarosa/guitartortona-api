@@ -384,7 +384,8 @@ public class UsedReceiptService {
 			receipt.setCustomerTaxCode(null);
 			return;
 		}
-		receipt.setCustomer(customerService.resolveCustomer(customer, input.updateCustomer()));
+		receipt.setCustomer(customerService.resolveCustomer(customer, input.updateCustomer(),
+				receipt.getCustomer() == null ? null : receipt.getCustomer().getId()));
 		receipt.setCustomerFirstName(customer.firstName().trim());
 		receipt.setCustomerLastName(customer.lastName().trim());
 		receipt.setCustomerAddress(customer.address().trim());

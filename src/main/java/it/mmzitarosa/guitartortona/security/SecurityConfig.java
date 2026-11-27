@@ -64,6 +64,8 @@ public class SecurityConfig {
 						// Gli elementi archiviati (eliminati) e il loro ripristino sono riservati agli admin
 						.requestMatchers(HttpMethod.GET, "/api/v1/archive/incomingInvoices", "/api/v1/archive/usedReceipts", "/api/v1/archive/ledger").hasRole(Roles.ADMIN)
 						.requestMatchers(HttpMethod.PATCH, "/api/v1/incomingInvoice/*/restore", "/api/v1/usedReceipt/*/restore", "/api/v1/ledgerEntry/*/restore").hasRole(Roles.ADMIN)
+						// L'anagrafica clienti (dati personali) si gestisce solo da admin; la scelta di un cliente nella ricevuta usa GET /customers
+						.requestMatchers("/api/v1/customer/**", "/api/v1/archive/customers").hasRole(Roles.ADMIN)
 						// La scelta sul brogliaccio dopo la modifica di una ricevuta registrata spetta all'admin
 						.requestMatchers(HttpMethod.PATCH, "/api/v1/usedReceipt/*/ledger/*").hasRole(Roles.ADMIN)
 						// Fatture, ricevute dell'usato, anagrafica clienti e brogliaccio contengono costi o dati personali: vietati ai viewer
