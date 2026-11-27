@@ -4,6 +4,7 @@ import it.mmzitarosa.guitartortona.dto.ledger.CreateLedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryLightDTO;
 import it.mmzitarosa.guitartortona.service.LedgerService;
+import it.mmzitarosa.guitartortona.utils.Constant.Status;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.SortDefault;
@@ -28,12 +29,12 @@ public class LedgerController {
 	}
 
 	/* == READ == */
-	@GetMapping("/ledger") public List<LedgerEntryLightDTO> readLedger(@RequestParam int year, @SortDefault(sort = {"date", "id"}, direction = Sort.Direction.DESC) Sort sort) {
-		return service.readLedger(year, false, sort);
+	@GetMapping("/ledger") public List<LedgerEntryLightDTO> readLedger(@RequestParam int year, @RequestParam(required = false) Status status, @SortDefault(sort = {"date", "id"}, direction = Sort.Direction.DESC) Sort sort) {
+		return service.readLedger(year, false, status, sort);
 	}
 
 	@GetMapping("/archive/ledger") public List<LedgerEntryLightDTO> readArchivedLedgerEntries(@RequestParam int year, @SortDefault(sort = {"date", "id"}, direction = Sort.Direction.DESC) Sort sort) {
-		return service.readLedger(year, true, sort);
+		return service.readLedger(year, true, null, sort);
 	}
 
 	@GetMapping("/ledgerEntry/{id}") public LedgerEntryDTO readLedgerEntry(@PathVariable long id) {
@@ -43,6 +44,10 @@ public class LedgerController {
 	/* == UPDATE == */
 	@PutMapping("/ledgerEntry/{id}") public LedgerEntryDTO updateLedgerEntry(@PathVariable long id, @Valid @RequestBody CreateLedgerEntryDTO request) {
 		return service.updateLedgerEntry(id, request);
+	}
+
+	@PatchMapping("/ledgerEntry/{id}/confirm") public LedgerEntryDTO confirmLedgerEntry(@PathVariable long id) {
+		return service.confirmLedgerEntry(id);
 	}
 
 	@PatchMapping("/ledgerEntry/{id}/archive") public void archiveLedgerEntry(@PathVariable long id) {

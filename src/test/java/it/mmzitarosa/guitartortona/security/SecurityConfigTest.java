@@ -122,6 +122,11 @@ class SecurityConfigTest {
 		mvc.perform(patch("/api/v1/ledgerEntry/1/archive").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
 	}
 
+	@Test void userCanConfirmLedgerEntries() throws Exception {
+		mvc.perform(patch("/api/v1/ledgerEntry/1/confirm").with(withRole(Roles.USER))).andExpect(status().is2xxSuccessful());
+		mvc.perform(patch("/api/v1/ledgerEntry/1/confirm").with(withRole(Roles.VIEWER))).andExpect(status().isForbidden());
+	}
+
 	@Test void userCanReadLedger() throws Exception {
 		mvc.perform(get("/api/v1/ledger").param("year", "2025").with(withRole(Roles.USER))).andExpect(status().isOk());
 	}

@@ -81,11 +81,13 @@ public class LedgerService {
 		return LedgerEntryDTO.of(getLedgerEntry(id));
 	}
 
-	/** Le righe archiviate sono visibili solo agli admin */
-	public List<LedgerEntryLightDTO> readLedger(int year, boolean archived, Sort sort) {
+	/** Le righe archiviate sono visibili solo agli admin; lo stato è un filtro facoltativo */
+	public List<LedgerEntryLightDTO> readLedger(int year, boolean archived, Status status, Sort sort) {
 		if (archived && !currentUser.isAdmin())
 			return List.of();
-		return repository.findAllByDateGreaterThanEqualAndArchived(LocalDate.of(year, 1, 1), archived, sort).stream().map(LedgerEntryLightDTO::of).toList();
+		return repository.findAllByDateGreaterThanEqualAndArchived(LocalDate.of(year, 1, 1), archived, sort).stream()
+				.filter(e -> status == null || e.getStatus() == status)
+				.map(LedgerEntryLightDTO::of).toList();
 	}
 
 	public LedgerEntryDTO updateLedgerEntry(long id, CreateLedgerEntryDTO input) {
@@ -112,6 +114,18 @@ public class LedgerService {
 		ledgerEntry = repository.save(ledgerEntry);
 		// Converto l'entity del record in DTO
 		return LedgerEntryDTO.of(ledgerEntry);
+	}
+
+	/**
+	 * PATCH /ledgerEntry/{id}/confirm
+	 * PENDING -> COMPLETED: la riga generata da un altro documento è stata verificata.
+	 */
+	public LedgerEntryDTO confirmLedgerEntry(long id) {
+		LedgerEntryEntity ledgerEntry = getLedgerEntry(id);
+		if (ledgerEntry.isArchived() || !ledgerEntry.isPending())
+			throw new ConflictException("LEDGER_ENTRY_NOT_PENDING", "Only pending ledger entries can be confirmed: " + id);
+		ledgerEntry.setStatus(Status.COMPLETED);
+		return LedgerEntryDTO.of(repository.save(ledgerEntry));
 	}
 
 	/**

@@ -2,6 +2,7 @@ package it.mmzitarosa.guitartortona;
 
 import it.mmzitarosa.guitartortona.dto.ledger.CreateLedgerEntryDTO;
 import it.mmzitarosa.guitartortona.dto.ledger.LedgerEntryDTO;
+import it.mmzitarosa.guitartortona.entity.LedgerEntryEntity;
 import it.mmzitarosa.guitartortona.exception.ConflictException;
 import it.mmzitarosa.guitartortona.exception.NotFoundException;
 import it.mmzitarosa.guitartortona.repository.LedgerRepository;
@@ -10,6 +11,7 @@ import it.mmzitarosa.guitartortona.service.BankService;
 import it.mmzitarosa.guitartortona.service.LedgerService;
 import it.mmzitarosa.guitartortona.utils.Constant.MovementType;
 import it.mmzitarosa.guitartortona.utils.Constant.PaymentMethod;
+import it.mmzitarosa.guitartortona.utils.Constant.Status;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
 /**
- * Brogliaccio: stesse regole delle ricevute dell'usato (archivia o+a, ripristina e cancella fisicamente solo a).
+ * Brogliaccio: archiviazione (stesse regole delle ricevute dell'usato: archivia o+a, ripristina e cancella solo a) e conferma delle righe PENDING.
  */
 @DataJpaTest(properties = {
 		"spring.flyway.enabled=true",
@@ -38,7 +40,7 @@ import static org.mockito.Mockito.when;
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({LedgerService.class, BankService.class})
-class LedgerArchiveTest {
+class LedgerEntryTest {
 
 	static final MariaDBContainer<?> MARIADB = new MariaDBContainer<>("mariadb:11").withInitScript("db/migration/init.sql");
 
@@ -76,8 +78,8 @@ class LedgerArchiveTest {
 		long id = newEntry();
 		service.archiveLedgerEntry(id);
 
-		assertTrue(service.readLedger(2026, false, sort).stream().noneMatch(e -> e.getId() == id));
-		assertTrue(service.readLedger(2026, true, sort).stream().anyMatch(e -> e.getId() == id && e.isArchived()));
+		assertTrue(service.readLedger(2026, false, null, sort).stream().noneMatch(e -> e.getId() == id));
+		assertTrue(service.readLedger(2026, true, null, sort).stream().anyMatch(e -> e.getId() == id && e.isArchived()));
 	}
 
 	@Test void archiveIsAllowedToOperatorsOnAnyRow() {
@@ -95,7 +97,7 @@ class LedgerArchiveTest {
 		service.archiveLedgerEntry(id);
 		when(currentUser.isAdmin()).thenReturn(false);
 
-		assertTrue(service.readLedger(2026, true, sort).isEmpty());
+		assertTrue(service.readLedger(2026, true, null, sort).isEmpty());
 		assertThrows(NotFoundException.class, () -> service.readLedgerEntry(id));
 	}
 
@@ -118,7 +120,7 @@ class LedgerArchiveTest {
 
 		assertFalse(restored.isArchived());
 		assertEquals("Riga di prova", restored.getDescription());
-		assertTrue(service.readLedger(2026, false, sort).stream().anyMatch(en -> en.getId() == id));
+		assertTrue(service.readLedger(2026, false, null, sort).stream().anyMatch(en -> en.getId() == id));
 	}
 
 	@Test void hardDeleteRequiresAnArchivedEntry() {
@@ -130,6 +132,44 @@ class LedgerArchiveTest {
 		service.archiveLedgerEntry(id);
 		service.deleteLedgerEntry(id);
 		assertFalse(repository.existsById(id));
+	}
+
+	private long newPendingEntry() {
+		LedgerEntryEntity entry = new LedgerEntryEntity();
+		entry.setDate(LocalDate.of(2026, 3, 1));
+		entry.setDescription("Pagato materiale usato");
+		entry.setPaymentMethod(PaymentMethod.CASH);
+		entry.setMovementType(MovementType.EXPENSE);
+		entry.setAmount(10.0);
+		entry.setStatus(Status.PENDING);
+		return repository.saveAndFlush(entry).getId();
+	}
+
+	@Test void confirmMovesAPendingEntryToCompleted() {
+		long id = newPendingEntry();
+		assertEquals(Status.PENDING, service.readLedgerEntry(id).getStatus());
+
+		assertEquals(Status.COMPLETED, service.confirmLedgerEntry(id).getStatus());
+		assertEquals(Status.COMPLETED, service.readLedgerEntry(id).getStatus());
+	}
+
+	@Test void onlyPendingNotArchivedEntriesCanBeConfirmed() {
+		long completed = newEntry();
+		assertEquals("LEDGER_ENTRY_NOT_PENDING", assertThrows(ConflictException.class, () -> service.confirmLedgerEntry(completed)).getCode());
+
+		long archived = newPendingEntry();
+		service.archiveLedgerEntry(archived);
+		assertEquals("LEDGER_ENTRY_NOT_PENDING", assertThrows(ConflictException.class, () -> service.confirmLedgerEntry(archived)).getCode());
+	}
+
+	@Test void ledgerCanBeFilteredByStatus() {
+		long completed = newEntry();
+		long pending = newPendingEntry();
+
+		var onlyPending = service.readLedger(2026, false, Status.PENDING, sort);
+		assertTrue(onlyPending.stream().anyMatch(e -> e.getId() == pending));
+		assertTrue(onlyPending.stream().noneMatch(e -> e.getId() == completed));
+		assertTrue(service.readLedger(2026, false, null, sort).stream().anyMatch(e -> e.getId() == completed));
 	}
 
 }
