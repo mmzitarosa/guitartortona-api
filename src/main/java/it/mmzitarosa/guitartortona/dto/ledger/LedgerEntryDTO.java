@@ -27,6 +27,7 @@ import static it.mmzitarosa.guitartortona.utils.Constant.*;
 	private MovementType movementType;		// Entrata/Uscita
 	private Double amount;					// Importo in entrata/uscita da banca/cassa
 	private String notes;					// Eventuali note
+	private Status status;					// PENDING (da confermare) o COMPLETED
 	private boolean archived;				// Eliminata (sola lettura)
 
 	public static LedgerEntryDTO of(LedgerEntryEntity ledgerEntry) {
@@ -44,6 +45,7 @@ import static it.mmzitarosa.guitartortona.utils.Constant.*;
 		dto.setMovementType(ledgerEntry.getMovementType());
 		dto.setAmount(ledgerEntry.getAmount());
 		dto.setNotes(ledgerEntry.getNotes());
+		dto.setStatus(ledgerEntry.getStatus());
 		dto.setArchived(ledgerEntry.isArchived());
 		return dto;
 	}
