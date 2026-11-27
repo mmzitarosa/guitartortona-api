@@ -8,7 +8,7 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
-/** Riga del registro di audit. Si scrive solo tramite {@code AuditEventListener} (JDBC), qui è mappata per la consultazione. */
+/** Riga del registro di audit. Le modifiche ai campi le scrive {@code AuditEventListener} (JDBC); le scelte esplicite dell'utente (ALIGN/IGNORE) si salvano da qui. */
 @Entity @Table(name = "audit_log")
 @Getter @Setter
 public class AuditLogEntity extends IdEntity {
@@ -16,6 +16,8 @@ public class AuditLogEntity extends IdEntity {
 	public static final String CREATE = "CREATE";
 	public static final String UPDATE = "UPDATE";
 	public static final String DELETE = "DELETE";
+	public static final String ALIGN = "ALIGN";
+	public static final String IGNORE = "IGNORE";
 
 	@Column(name = "created_date") private LocalDateTime createdDate;
 	private String username;

@@ -3,6 +3,7 @@ package it.mmzitarosa.guitartortona;
 import it.mmzitarosa.guitartortona.dto.brand.BrandInput;
 import it.mmzitarosa.guitartortona.dto.category.CategoryInput;
 import it.mmzitarosa.guitartortona.dto.customer.CustomerInput;
+import it.mmzitarosa.guitartortona.dto.ledger.LedgerAlignmentDTO;
 import it.mmzitarosa.guitartortona.dto.product.ProductInput;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.ProductUsedReceiptInput;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptDetailDTO;
@@ -13,6 +14,7 @@ import it.mmzitarosa.guitartortona.entity.LedgerEntryEntity;
 import it.mmzitarosa.guitartortona.entity.SaleEntity;
 import it.mmzitarosa.guitartortona.exception.ConflictException;
 import it.mmzitarosa.guitartortona.exception.NotFoundException;
+import it.mmzitarosa.guitartortona.repository.AuditLogRepository;
 import it.mmzitarosa.guitartortona.repository.CategoryRepository;
 import it.mmzitarosa.guitartortona.repository.LedgerRepository;
 import it.mmzitarosa.guitartortona.repository.ProductRepository;
@@ -81,6 +83,7 @@ class UsedReceiptTest {
 	@Autowired ProductRepository products;
 	@Autowired CategoryRepository categories;
 	@Autowired LedgerRepository ledger;
+	@Autowired AuditLogRepository audit;
 	@Autowired EntityManager em;
 
 	private CategoryEntity category;
@@ -96,6 +99,7 @@ class UsedReceiptTest {
 	private void login(boolean admin) {
 		when(currentUser.isAdmin()).thenReturn(admin);
 		when(currentUser.canSeeCosts()).thenReturn(true);
+		when(currentUser.username()).thenReturn("tester");
 	}
 
 	private UsedReceiptInput receipt(LocalDate date, boolean withCustomer) {
@@ -252,14 +256,127 @@ class UsedReceiptTest {
 		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
 		Long productId = receipt.items().get(0).product().id();
 
-		assertThrows(ConflictException.class, () -> service.deleteUsedReceipt(receipt.id()));
+		assertThrows(ConflictException.class, () -> service.deleteUsedReceipt(receipt.id(), UsedReceiptService.LedgerChoice.IGNORE));
 		service.archiveUsedReceipt(receipt.id());
-		service.deleteUsedReceipt(receipt.id());
+		service.deleteUsedReceipt(receipt.id(), UsedReceiptService.LedgerChoice.IGNORE);
 		em.flush();
 		em.clear();
 
 		assertThrows(NotFoundException.class, () -> service.getUsedReceiptDetail(receipt.id()));
 		assertTrue(products.findById(productId).isEmpty());
+	}
+
+	private UsedReceiptInput input(UsedReceiptDetailDTO receipt, LocalDate date) {
+		return new UsedReceiptInput(date, null, receipt.customer() == null ? null : new CustomerInput(receipt.customer().id(), "Mario", "Rossi", "Via Roma 1", "15057", "Tortona", "AL", "CI", "AB123", "RSSMRA80A01L304X"), false);
+	}
+
+	@Test void registeredReceiptIsLinkedToItsLedgerEntry() {
+		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+
+		LedgerEntryEntity row = ledger.findByUsedReceiptId(receipt.id()).orElseThrow();
+		assertEquals(row.getId(), service.getUsedReceiptDetail(receipt.id()).ledgerEntryId());
+		assertNull(service.getUsedReceiptDetail(receipt.id()).ledgerAlignment());
+	}
+
+	@Test void editingARegisteredReceiptProposesAlignmentWithoutTouchingTheLedger() {
+		login(true);
+		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+		Long productId = receipt.items().get(0).id();
+
+		itemService.updateProductInUsedReceipt(receipt.id(), productId, item("Strato", 80));
+		em.flush();
+		em.clear();
+		service.updateUsedReceipt(receipt.id(), input(receipt, LocalDate.of(2026, 3, 1)));
+		em.flush();
+		em.clear();
+
+		var alignment = service.getUsedReceiptDetail(receipt.id()).ledgerAlignment();
+		assertEquals(LedgerAlignmentDTO.Action.UPDATE, alignment.action());
+		assertEquals(100.0, alignment.current().amount());
+		assertEquals(80.0, alignment.proposed().amount());
+		assertEquals(LocalDate.of(2026, 3, 1), alignment.proposed().date());
+		LedgerEntryEntity row = ledger.findByUsedReceiptId(receipt.id()).orElseThrow();
+		assertEquals(100.0, row.getAmount());
+		assertEquals(LocalDate.of(2026, 2, 10), row.getDate());
+
+		service.alignLedger(receipt.id());
+		em.flush();
+		em.clear();
+
+		row = ledger.findByUsedReceiptId(receipt.id()).orElseThrow();
+		assertEquals(80.0, row.getAmount());
+		assertEquals(LocalDate.of(2026, 3, 1), row.getDate());
+		assertNull(service.getUsedReceiptDetail(receipt.id()).ledgerAlignment());
+		assertEquals("ALIGN", audit.findAll().get(audit.findAll().size() - 1).getOperation());
+	}
+
+	@Test void ignoringLeavesTheLedgerAndIsAudited() {
+		login(true);
+		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+		service.updateUsedReceipt(receipt.id(), input(receipt, LocalDate.of(2026, 2, 20)));
+		em.flush();
+		em.clear();
+
+		service.ignoreLedger(receipt.id());
+		em.flush();
+		em.clear();
+
+		assertEquals(LocalDate.of(2026, 2, 10), ledger.findByUsedReceiptId(receipt.id()).orElseThrow().getDate());
+		assertTrue(audit.findAll().stream().anyMatch(l -> "IGNORE".equals(l.getOperation()) && receipt.id().equals(l.getEntityId())));
+		assertThrows(ConflictException.class, () -> service.ignoreLedger(receipt.id()));
+	}
+
+	@Test void archivedReceiptProposesArchivingTheLedgerEntryAndDeletionNeedsAChoice() {
+		login(true);
+		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+
+		service.archiveUsedReceipt(receipt.id());
+		em.flush();
+		em.clear();
+		assertEquals(LedgerAlignmentDTO.Action.ARCHIVE, service.getUsedReceiptDetail(receipt.id()).ledgerAlignment().action());
+		assertEquals("USED_RECEIPT_LEDGER_CHOICE_REQUIRED",
+				assertThrows(ConflictException.class, () -> service.deleteUsedReceipt(receipt.id(), null)).getCode());
+
+		service.alignLedger(receipt.id());
+		em.flush();
+		em.clear();
+		assertTrue(ledger.findByUsedReceiptId(receipt.id()).orElseThrow().isArchived());
+
+		service.deleteUsedReceipt(receipt.id(), null);
+		em.flush();
+		em.clear();
+		assertTrue(ledger.findAll().stream().anyMatch(e -> e.isArchived() && e.getUsedReceiptId() == null && "Pagato materiale usato".equals(e.getDescription())));
+	}
+
+	@Test void deletingWithIgnoreKeepsTheLedgerEntryVisible() {
+		login(true);
+		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+		service.archiveUsedReceipt(receipt.id());
+		long rowId = ledger.findByUsedReceiptId(receipt.id()).orElseThrow().getId();
+
+		service.deleteUsedReceipt(receipt.id(), UsedReceiptService.LedgerChoice.IGNORE);
+		em.flush();
+		em.clear();
+
+		LedgerEntryEntity row = ledger.findById(rowId).orElseThrow();
+		assertFalse(row.isArchived());
+		assertNull(row.getUsedReceiptId());
+	}
+
+	@Test void registeredReceiptKeepsItsYearAndOnlyAdminSeesTheAlignment() {
+		login(true);
+		UsedReceiptDetailDTO receipt = registered(LocalDate.of(2026, 2, 10), true, "Strato");
+
+		ConflictException e = assertThrows(ConflictException.class, () -> service.updateUsedReceipt(receipt.id(), input(receipt, LocalDate.of(2027, 1, 2))));
+		assertEquals("USED_RECEIPT_YEAR_FROZEN", e.getCode());
+		service.updateUsedReceipt(receipt.id(), input(receipt, LocalDate.of(2026, 12, 31)));
+		em.flush();
+		em.clear();
+
+		assertNotNull(service.getUsedReceiptDetail(receipt.id()).ledgerAlignment());
+		assertEquals("1/26", service.getUsedReceiptDetail(receipt.id()).number());
+		login(false);
+		assertNull(service.getUsedReceiptDetail(receipt.id()).ledgerAlignment());
 	}
 
 	@Test void printableFromPendingOnAndRendersTemplate() {

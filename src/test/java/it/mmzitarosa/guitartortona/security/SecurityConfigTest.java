@@ -110,6 +110,12 @@ class SecurityConfigTest {
 		mvc.perform(patch("/api/v1/usedReceipt/1/restore").with(withRole(Roles.ADMIN))).andExpect(status().is2xxSuccessful());
 	}
 
+	@Test void ledgerAlignmentChoiceIsAdminOnly() throws Exception {
+		mvc.perform(patch("/api/v1/usedReceipt/1/ledger/align").with(withRole(Roles.USER))).andExpect(status().isForbidden());
+		mvc.perform(patch("/api/v1/usedReceipt/1/ledger/ignore").with(withRole(Roles.USER))).andExpect(status().isForbidden());
+		mvc.perform(patch("/api/v1/usedReceipt/1/ledger/align").with(withRole(Roles.ADMIN))).andExpect(status().is2xxSuccessful());
+	}
+
 	@Test void archivedLedgerAndRestoreAreAdminOnly() throws Exception {
 		mvc.perform(get("/api/v1/archive/ledger").param("year", "2025").with(withRole(Roles.USER))).andExpect(status().isForbidden());
 		mvc.perform(patch("/api/v1/ledgerEntry/1/restore").with(withRole(Roles.USER))).andExpect(status().isForbidden());

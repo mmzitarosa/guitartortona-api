@@ -66,6 +66,17 @@ public class UsedReceiptController {
 		return ResponseEntity.ok(service.registerUsedReceipt(id));
 	}
 
+	/* Scelta dell'admin sul brogliaccio dopo una modifica, un'archiviazione o un'eliminazione della ricevuta */
+	@PatchMapping("/usedReceipt/{id}/ledger/align")
+	public ResponseEntity<UsedReceiptDetailDTO> alignLedger(@PathVariable long id) {
+		return ResponseEntity.ok(service.alignLedger(id));
+	}
+
+	@PatchMapping("/usedReceipt/{id}/ledger/ignore")
+	public ResponseEntity<UsedReceiptDetailDTO> ignoreLedger(@PathVariable long id) {
+		return ResponseEntity.ok(service.ignoreLedger(id));
+	}
+
 	@PatchMapping("/usedReceipt/{id}/restore")
 	public ResponseEntity<UsedReceiptDetailDTO> restoreUsedReceipt(@PathVariable long id) {
 		return ResponseEntity.ok(service.restoreUsedReceipt(id));
@@ -79,8 +90,8 @@ public class UsedReceiptController {
 
 	/* == DELETE (fisica, solo admin e solo se già archiviata) == */
 	@DeleteMapping("/usedReceipt/{id}")
-	public ResponseEntity<Void> deleteUsedReceipt(@PathVariable long id) {
-		service.deleteUsedReceipt(id);
+	public ResponseEntity<Void> deleteUsedReceipt(@PathVariable long id, @RequestParam(required = false) UsedReceiptService.LedgerChoice ledger) {
+		service.deleteUsedReceipt(id, ledger);
 		return ResponseEntity.noContent().build();
 	}
 

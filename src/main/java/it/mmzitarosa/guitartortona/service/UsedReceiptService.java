@@ -1,15 +1,19 @@
 package it.mmzitarosa.guitartortona.service;
 
 import it.mmzitarosa.guitartortona.dto.customer.CustomerInput;
+import it.mmzitarosa.guitartortona.dto.ledger.LedgerAlignmentDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptDetailDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptInput;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptListDTO;
 import it.mmzitarosa.guitartortona.dto.purchase.usedreceipt.UsedReceiptPrintDTO;
+import it.mmzitarosa.guitartortona.entity.AuditLogEntity;
+import it.mmzitarosa.guitartortona.entity.LedgerEntryEntity;
 import it.mmzitarosa.guitartortona.entity.PurchaseItemEntity;
 import it.mmzitarosa.guitartortona.entity.UsedReceiptCounterEntity;
 import it.mmzitarosa.guitartortona.entity.UsedReceiptEntity;
 import it.mmzitarosa.guitartortona.exception.ConflictException;
 import it.mmzitarosa.guitartortona.exception.NotFoundException;
+import it.mmzitarosa.guitartortona.repository.AuditLogRepository;
 import it.mmzitarosa.guitartortona.repository.PurchaseItemRepository;
 import it.mmzitarosa.guitartortona.repository.SaleRepository;
 import it.mmzitarosa.guitartortona.repository.UsedReceiptCounterRepository;
@@ -24,8 +28,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Ciclo di vita: DRAFT -> (conferma) PENDING -> (registra) COMPLETED.
@@ -35,12 +42,19 @@ import java.util.List;
 @Service @Transactional
 public class UsedReceiptService {
 
+	private static final String LEDGER_FIELD = "ledger";
+
+	/** Cosa fare della riga di brogliaccio quando si elimina definitivamente la ricevuta */
+	public enum LedgerChoice { ALIGN, IGNORE }
+
+
 	private final UsedReceiptRepository repository;
 	private final UsedReceiptCounterRepository counterRepository;
 	private final PurchaseItemRepository purchaseItemRepository;
 	private final SaleRepository saleRepository;
 	private final CustomerService customerService;
 	private final LedgerService ledgerService;
+	private final AuditLogRepository auditLogRepository;
 	private final CurrentUser currentUser;
 
 	/**
@@ -57,7 +71,7 @@ public class UsedReceiptService {
 	 * GET /usedReceipt/{id}
 	 */
 	@Transactional(readOnly = true) public UsedReceiptDetailDTO getUsedReceiptDetail(Long id) {
-		return UsedReceiptDetailDTO.of(getUsedReceipt(id));
+		return detail(getUsedReceipt(id));
 	}
 
 	/**
@@ -66,7 +80,7 @@ public class UsedReceiptService {
 	@Transactional(readOnly = true) public UsedReceiptDetailDTO getUsedReceiptDetailByCode(String code) {
 		return repository.findByInternalCodeIgnoreCase(code.trim())
 				.filter(r -> !r.isArchived() || currentUser.isAdmin())
-				.map(UsedReceiptDetailDTO::of)
+				.map(this::detail)
 				.orElseThrow(() -> new NotFoundException("USED_RECEIPT_NOT_FOUND", "Used receipt not found: " + code));
 	}
 
@@ -152,9 +166,9 @@ public class UsedReceiptService {
 		repository.save(receipt);
 
 		ledgerService.createAutoEntry(receipt.getDate(), receipt.getReference(), receipt.getDate(), "Pagato materiale usato",
-				receipt.getCustomerFullName() == null ? "" : receipt.getCustomerFullName(), PaymentMethod.CASH, MovementType.EXPENSE, receipt.getAmount());
+				receipt.getCustomerFullName() == null ? "" : receipt.getCustomerFullName(), PaymentMethod.CASH, MovementType.EXPENSE, receipt.getAmount(), receipt.getId());
 
-		return UsedReceiptDetailDTO.of(receipt);
+		return detail(receipt);
 	}
 
 	/**
@@ -189,10 +203,11 @@ public class UsedReceiptService {
 	}
 
 	/**
-	 * DELETE /usedReceipt/{id} (solo admin)
+	 * DELETE /usedReceipt/{id}?ledger=ALIGN|IGNORE (solo admin)
 	 * Cancellazione fisica, ammessa solo per ricevute già archiviate e senza vendite sui prodotti.
+	 * Se la riga di brogliaccio collegata è ancora visibile l'admin deve scegliere: ALIGN la elimina, IGNORE la lascia com'è.
 	 */
-	public void deleteUsedReceipt(Long id) {
+	public void deleteUsedReceipt(Long id, LedgerChoice ledger) {
 		UsedReceiptEntity receipt = getUsedReceipt(id);
 
 		if (!receipt.isArchived())
@@ -200,10 +215,113 @@ public class UsedReceiptService {
 		if (receipt.getItems().stream().anyMatch(item -> saleRepository.existsByProductId(item.getProduct().getId())))
 			throw new ConflictException("USED_RECEIPT_HAS_SALES", "Receipt has products already sold: " + id);
 
+		Optional<LedgerEntryEntity> row = ledgerService.findByUsedReceipt(id).filter(e -> !e.isArchived());
+		if (row.isPresent()) {
+			if (ledger == null)
+				throw new ConflictException("USED_RECEIPT_LEDGER_CHOICE_REQUIRED", "Choose what to do with the ledger entry of receipt: " + id);
+			if (ledger == LedgerChoice.ALIGN)
+				ledgerService.archiveLedgerEntry(row.get().getId());
+			audit(receipt, ledger == LedgerChoice.ALIGN ? AuditLogEntity.ALIGN : AuditLogEntity.IGNORE, "Ledger entry " + row.get().getId() + " on receipt deletion");
+		}
+
 		// I trigger sullo stock partono solo se le righe vengono cancellate esplicitamente (non dal cascade del DB)
 		purchaseItemRepository.deleteAll(new ArrayList<>(receipt.getItems()));
 		purchaseItemRepository.flush();
 		repository.delete(receipt);
+	}
+
+	/**
+	 * PATCH /usedReceipt/{id}/ledger/align (solo admin)
+	 * Porta la riga di brogliaccio ai valori della ricevuta, oppure la elimina se la ricevuta è eliminata.
+	 */
+	public UsedReceiptDetailDTO alignLedger(Long id) {
+		UsedReceiptEntity receipt = getUsedReceipt(id);
+		LedgerAlignmentDTO alignment = pendingAlignment(receipt)
+				.orElseThrow(() -> new ConflictException("USED_RECEIPT_LEDGER_ALIGNED", "Nothing to align for receipt: " + id));
+
+		if (alignment.action() == LedgerAlignmentDTO.Action.ARCHIVE)
+			ledgerService.archiveLedgerEntry(alignment.ledgerEntryId());
+		else
+			ledgerService.alignEntry(ledgerService.getLedgerEntry(alignment.ledgerEntryId()), receipt.getDate(), ledgerReason(receipt), receipt.getAmount());
+		audit(receipt, AuditLogEntity.ALIGN, describe(alignment));
+
+		return detail(receipt);
+	}
+
+	/**
+	 * PATCH /usedReceipt/{id}/ledger/ignore (solo admin)
+	 * Lascia la riga di brogliaccio com'è; la scelta resta nell'audit.
+	 */
+	public UsedReceiptDetailDTO ignoreLedger(Long id) {
+		UsedReceiptEntity receipt = getUsedReceipt(id);
+		LedgerAlignmentDTO alignment = pendingAlignment(receipt)
+				.orElseThrow(() -> new ConflictException("USED_RECEIPT_LEDGER_ALIGNED", "Nothing to ignore for receipt: " + id));
+
+		audit(receipt, AuditLogEntity.IGNORE, describe(alignment));
+
+		return detail(receipt);
+	}
+
+	/**
+	 * Helper: dettaglio con riga di brogliaccio collegata e, per l'admin, la differenza da allineare
+	 */
+	private UsedReceiptDetailDTO detail(UsedReceiptEntity receipt) {
+		Long ledgerEntryId = ledgerService.findByUsedReceipt(receipt.getId()).map(LedgerEntryEntity::getId).orElse(null);
+		return UsedReceiptDetailDTO.of(receipt, ledgerEntryId, pendingAlignment(receipt).orElse(null));
+	}
+
+	/**
+	 * Helper: differenza tra ricevuta registrata e riga collegata. Non c'è nulla da proporre se la riga è già eliminata
+	 * o se coincide con la ricevuta; una ricevuta eliminata propone di eliminare anche la riga.
+	 */
+	private Optional<LedgerAlignmentDTO> pendingAlignment(UsedReceiptEntity receipt) {
+		if (!currentUser.isAdmin() || !receipt.isCompleted())
+			return Optional.empty();
+		return proposal(receipt).filter(alignment -> !alreadyIgnored(receipt, alignment));
+	}
+
+	/**
+	 * Helper: una differenza già ignorata non viene riproposta finché la ricevuta o la riga non cambiano ancora
+	 */
+	private boolean alreadyIgnored(UsedReceiptEntity receipt, LedgerAlignmentDTO alignment) {
+		return auditLogRepository.findFirstByEntityTypeAndEntityIdAndFieldOrderByIdDesc("UsedReceipt", receipt.getId(), LEDGER_FIELD)
+				.filter(l -> AuditLogEntity.IGNORE.equals(l.getOperation()) && describe(alignment).equals(l.getNewValue()))
+				.isPresent();
+	}
+
+	private Optional<LedgerAlignmentDTO> proposal(UsedReceiptEntity receipt) {
+		return ledgerService.findByUsedReceipt(receipt.getId()).filter(e -> !e.isArchived()).flatMap(row -> {
+			LedgerAlignmentDTO.Values current = new LedgerAlignmentDTO.Values(row.getDate(), row.getReason(), row.getAmount());
+			if (receipt.isArchived())
+				return Optional.of(new LedgerAlignmentDTO(row.getId(), LedgerAlignmentDTO.Action.ARCHIVE, current, null));
+			LedgerAlignmentDTO.Values proposed = new LedgerAlignmentDTO.Values(receipt.getDate(), ledgerReason(receipt), receipt.getAmount());
+			boolean same = Objects.equals(current.date(), proposed.date()) && Objects.equals(current.reason(), proposed.reason())
+					&& current.amount() != null && proposed.amount() != null && Math.abs(current.amount() - proposed.amount()) < 0.005;
+			return same ? Optional.empty() : Optional.of(new LedgerAlignmentDTO(row.getId(), LedgerAlignmentDTO.Action.UPDATE, current, proposed));
+		});
+	}
+
+	private static String ledgerReason(UsedReceiptEntity receipt) {
+		return receipt.getCustomerFullName() == null ? "" : receipt.getCustomerFullName();
+	}
+
+	private static String describe(LedgerAlignmentDTO alignment) {
+		return "Ledger entry " + alignment.ledgerEntryId() + " " + alignment.action() + ": " + alignment.current() + " -> " + alignment.proposed();
+	}
+
+	/**
+	 * Helper: la scelta sul brogliaccio è una decisione dell'utente, non una modifica di un campo: va nel registro di audit
+	 */
+	private void audit(UsedReceiptEntity receipt, String operation, String detail) {
+		AuditLogEntity log = new AuditLogEntity();
+		log.setCreatedDate(LocalDateTime.now());
+		log.setUsername(currentUser.username());
+		log.setEntityType("UsedReceipt");
+		log.setEntityId(receipt.getId());
+		log.setOperation(operation);
+		log.setField(LEDGER_FIELD);
+		log.setNewValue(detail);
+		auditLogRepository.save(log);
 	}
 
 	/**
@@ -245,6 +363,9 @@ public class UsedReceiptService {
 	 * Helper: copia i dati in ingresso. I dati cliente sono una copia sulla ricevuta; l'anagrafica si aggiorna solo se richiesto.
 	 */
 	private void apply(UsedReceiptEntity receipt, UsedReceiptInput input) {
+		// Anno e numero nascono alla registrazione e non cambiano più: la data può muoversi solo dentro quell'anno
+		if (receipt.getYear() != null && input.date().getYear() != receipt.getYear())
+			throw new ConflictException("USED_RECEIPT_YEAR_FROZEN", "Registered receipt date must stay in year " + receipt.getYear());
 		receipt.setDate(input.date());
 		receipt.setNotes(CustomerService.blankToNull(input.notes()));
 

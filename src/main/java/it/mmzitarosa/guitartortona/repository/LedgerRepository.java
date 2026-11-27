@@ -6,10 +6,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface LedgerRepository extends JpaRepository<LedgerEntryEntity, Long> {
 	
 	List<LedgerEntryEntity> findAllByArchivedFalseAndDateBetween(LocalDate from, LocalDate to, Sort sort);
 	List<LedgerEntryEntity> findAllByDateGreaterThanEqualAndArchived(LocalDate date, boolean archived, Sort sort);
+	Optional<LedgerEntryEntity> findByUsedReceiptId(Long usedReceiptId);
 
 }
