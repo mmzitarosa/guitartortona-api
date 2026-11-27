@@ -170,6 +170,9 @@ public class UsedReceiptService {
 		if (!receipt.isDraft() && !currentUser.isAdmin())
 			throw new ConflictException("USED_RECEIPT_NOT_ARCHIVABLE", "Only draft receipts can be archived: " + id);
 
+		if (receipt.isCompleted() && hasSoldItems(receipt))
+			throw new ConflictException("USED_RECEIPT_HAS_SALES", "Receipt has products already sold: " + id);
+
 		receipt.setArchived(true);
 		repository.save(receipt);
 	}
@@ -197,13 +200,17 @@ public class UsedReceiptService {
 
 		if (!receipt.isArchived())
 			throw new ConflictException("USED_RECEIPT_NOT_ARCHIVED", "Only archived receipts can be permanently deleted: " + id);
-		if (receipt.getItems().stream().anyMatch(item -> saleRepository.existsByProductId(item.getProduct().getId())))
+		if (hasSoldItems(receipt))
 			throw new ConflictException("USED_RECEIPT_HAS_SALES", "Receipt has products already sold: " + id);
 
 		// I trigger sullo stock partono solo se le righe vengono cancellate esplicitamente (non dal cascade del DB)
 		purchaseItemRepository.deleteAll(new ArrayList<>(receipt.getItems()));
 		purchaseItemRepository.flush();
 		repository.delete(receipt);
+	}
+
+	private boolean hasSoldItems(UsedReceiptEntity receipt) {
+		return receipt.getItems().stream().anyMatch(item -> saleRepository.existsByProductId(item.getProduct().getId()));
 	}
 
 	/**

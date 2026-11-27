@@ -14,7 +14,10 @@ import it.mmzitarosa.guitartortona.repository.ProductRepository;
 import it.mmzitarosa.guitartortona.repository.PurchaseItemRepository;
 import it.mmzitarosa.guitartortona.repository.SupplierRepository;
 import it.mmzitarosa.guitartortona.security.CurrentUser;
+import it.mmzitarosa.guitartortona.service.BrandService;
+import it.mmzitarosa.guitartortona.service.CategoryService;
 import it.mmzitarosa.guitartortona.service.IncomingInvoiceService;
+import it.mmzitarosa.guitartortona.service.ProductService;
 import it.mmzitarosa.guitartortona.service.SupplierService;
 import it.mmzitarosa.guitartortona.specification.ProductVisibilitySpecification;
 import it.mmzitarosa.guitartortona.utils.Constant.ProductCondition;
@@ -44,7 +47,7 @@ import static org.mockito.Mockito.when;
 		"spring.jpa.hibernate.ddl-auto=none"
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({IncomingInvoiceService.class, SupplierService.class})
+@Import({IncomingInvoiceService.class, SupplierService.class, ProductService.class, CategoryService.class, BrandService.class})
 class InvoiceArchiveTest {
 
 	static final MariaDBContainer<?> MARIADB = new MariaDBContainer<>("mariadb:11").withInitScript("db/migration/init.sql");

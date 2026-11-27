@@ -23,6 +23,7 @@ public class IncomingInvoiceService {
 
 	private final IncomingInvoiceRepository repository;
 	private final SupplierService supplierService;
+	private final ProductService productService;
 	private final it.mmzitarosa.guitartortona.security.CurrentUser currentUser;
 
 	/**
@@ -129,6 +130,10 @@ public class IncomingInvoiceService {
 			return;
 		if (!incomingInvoice.isDraft() && !currentUser.isAdmin())
 			throw new ConflictException("INVOICE_NOT_ARCHIVABLE", "Only draft invoices can be archived: " + id);
+
+		// L'archiviazione toglie dalla giacenza le quantità acquistate: non possono essere già state vendute
+		if (incomingInvoice.isCompleted())
+			incomingInvoice.getItems().forEach(item -> productService.assertStockNotNegative(item.getProduct(), -item.getQuantity()));
 
 		incomingInvoice.setArchived(true);
 		repository.save(incomingInvoice);

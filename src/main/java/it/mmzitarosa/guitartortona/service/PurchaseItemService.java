@@ -63,13 +63,15 @@ public class PurchaseItemService {
 	 * PUT /incomingInvoice/{id}/product/{productId}
 	 */
 	public ProductPurchaseItemDTO updateProductInIncomingInvoice(Long incomingInvoiceId, Long purchaseItemId, ProductIncomingInvoiceInput dto) {
-		incomingInvoiceService.getEditableIncomingInvoice(incomingInvoiceId);
+		IncomingInvoiceEntity incomingInvoice = incomingInvoiceService.getEditableIncomingInvoice(incomingInvoiceId);
 		PurchaseItemEntity item = getPurchaseItem(purchaseItemId);
 
 		// Verifica che l'item appartenga a questa fattura
 		if (!item.getPurchase().getId().equals(incomingInvoiceId)) {
 			throw new ConflictException("PURCHASE_ITEM_NOT_IN_INVOICE", "Purchase item does not belong to this invoice");
 		}
+		if (incomingInvoice.isCompleted())
+			productService.assertStockNotNegative(item.getProduct(), dto.quantity() - item.getQuantity());
 
 		ProductEntity product = productService.updateProduct(item.getProduct(), dto.product());
 
@@ -86,13 +88,16 @@ public class PurchaseItemService {
 	 * DELETE /incomingInvoice/{id}/product/{productId}
 	 */
 	public void deleteProductFromIncomingInvoice(Long incomingInvoiceId, Long purchaseItemId) {
-		incomingInvoiceService.getEditableIncomingInvoice(incomingInvoiceId);
+		IncomingInvoiceEntity incomingInvoice = incomingInvoiceService.getEditableIncomingInvoice(incomingInvoiceId);
 		PurchaseItemEntity item = getPurchaseItem(purchaseItemId);
 
 		// Verifica che l'item appartenga a questa fattura
 		if (!item.getPurchase().getId().equals(incomingInvoiceId)) {
 			throw new ConflictException("PURCHASE_ITEM_NOT_IN_INVOICE", "Purchase item does not belong to this invoice");
 		}
+
+		if (incomingInvoice.isCompleted())
+			productService.assertStockNotNegative(item.getProduct(), -item.getQuantity());
 
 		repository.deleteById(purchaseItemId);
 	}

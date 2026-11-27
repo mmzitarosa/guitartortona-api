@@ -3,6 +3,7 @@ package it.mmzitarosa.guitartortona.service;
 import it.mmzitarosa.guitartortona.dto.PageDTO;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import it.mmzitarosa.guitartortona.exception.ConflictException;
 import it.mmzitarosa.guitartortona.exception.NotFoundException;
 
 import it.mmzitarosa.guitartortona.dto.product.ProductDetailDTO;
@@ -40,6 +41,18 @@ public class ProductService {
 	private final CategoryService categoryService;
 	private final BrandService brandService;
 	private final CurrentUser currentUser;
+
+	/**
+	 * Garantisce che la giacenza non scenda sotto 0 applicando la variazione indicata (negativa = riduzione)
+	 */
+	public void assertStockNotNegative(ProductEntity product, int delta) {
+		if (delta >= 0)
+			return;
+		int stock = Objects.requireNonNullElse(repository.findStockById(product.getId()), 0);
+		if (stock + delta < 0)
+			throw new ConflictException("PRODUCT_STOCK_WOULD_BE_NEGATIVE",
+					"Product stock would become negative: " + product.getDescription() + " (stock " + stock + ", change " + delta + ")");
+	}
 
 	/**
 	 * GET /products

@@ -39,7 +39,7 @@ CREATE TABLE `product` (
   `notes` varchar(255) DEFAULT NULL,
   `created_date` datetime NOT NULL,
   `updated_date` datetime NOT NULL,
-  `stock` smallint(4) DEFAULT 0,
+  `stock` smallint(4) DEFAULT 0 CHECK (`stock` >= 0),
   `stock_pending` smallint(4) DEFAULT 0,
 
   PRIMARY KEY (`id`),
