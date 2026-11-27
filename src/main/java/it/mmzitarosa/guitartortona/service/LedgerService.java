@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static it.mmzitarosa.guitartortona.utils.Constant.MovementType;
 import static it.mmzitarosa.guitartortona.utils.Constant.PaymentMethod;
@@ -63,7 +64,7 @@ public class LedgerService {
 	 * Helper: riga di brogliaccio generata automaticamente da un altro documento (resta PENDING finché non viene verificata)
 	 */
 	protected void createAutoEntry(LocalDate date, String invoiceNumber, LocalDate invoiceDate, String description, String reason,
-								   PaymentMethod paymentMethod, MovementType movementType, Double amount) {
+								   PaymentMethod paymentMethod, MovementType movementType, Double amount, Long usedReceiptId) {
 		LedgerEntryEntity ledgerEntry = new LedgerEntryEntity();
 		ledgerEntry.setDate(date);
 		ledgerEntry.setInvoiceNumber(invoiceNumber);
@@ -73,7 +74,26 @@ public class LedgerService {
 		ledgerEntry.setPaymentMethod(paymentMethod);
 		ledgerEntry.setMovementType(movementType);
 		ledgerEntry.setAmount(amount);
+		ledgerEntry.setUsedReceiptId(usedReceiptId);
 		ledgerEntry.setStatus(Status.PENDING);
+		repository.save(ledgerEntry);
+	}
+
+	/**
+	 * Helper: riga generata da una ricevuta dell'usato (anche se archiviata: l'admin la vede, gli altri no)
+	 */
+	protected Optional<LedgerEntryEntity> findByUsedReceipt(long usedReceiptId) {
+		return repository.findByUsedReceiptId(usedReceiptId).filter(e -> !e.isArchived() || currentUser.isAdmin());
+	}
+
+	/**
+	 * Helper: porta la riga ai valori della ricevuta da cui nasce
+	 */
+	protected void alignEntry(LedgerEntryEntity ledgerEntry, LocalDate date, String reason, Double amount) {
+		ledgerEntry.setDate(date);
+		ledgerEntry.setInvoiceDate(date);
+		ledgerEntry.setReason(reason);
+		ledgerEntry.setAmount(amount);
 		repository.save(ledgerEntry);
 	}
 

@@ -60,16 +60,21 @@ public class ProductService {
 		return detail(product);
 	}
 
-	/** Il riferimento di un prodotto usato (es. 1/26 A) è riservato a user e admin. */
+	/** Riferimento (es. 1/26 A) e ricevuta di un prodotto usato sono riservati a user e admin. */
 	private ProductDetailDTO detail(ProductEntity product) {
 		String reference = null;
+		Long receiptId = null;
 		if (currentUser.canSeeCosts()) {
 			reference = product.getPurchaseItems().stream()
 					.filter(i -> !i.getPurchase().isArchived())
 					.map(i -> Hibernate.unproxy(i.getPurchase()) instanceof UsedReceiptEntity receipt ? receipt.getItemReference(i.getLetter()) : null)
 					.filter(Objects::nonNull).findFirst().orElse(null);
+			receiptId = product.getPurchaseItems().stream()
+					.map(i -> Hibernate.unproxy(i.getPurchase()))
+					.filter(UsedReceiptEntity.class::isInstance)
+					.map(p -> ((UsedReceiptEntity) p).getId()).findFirst().orElse(null);
 		}
-		return ProductDetailDTO.of(product, reference);
+		return ProductDetailDTO.of(product, reference, receiptId);
 	}
 
 	/**

@@ -25,5 +25,7 @@ public class LedgerEntryEntity extends StatusEntity {
 	@Enumerated(EnumType.ORDINAL) @Column(name = "movement_type") private MovementType movementType;
 	private Double amount;
 	private String notes;
+	/** Ricevuta dell'usato da cui nasce la riga (solo per le righe generate alla registrazione) */
+	@Column(name = "used_receipt_id") private Long usedReceiptId;
 
 }
