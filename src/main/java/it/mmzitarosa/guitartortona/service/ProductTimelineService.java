@@ -13,6 +13,7 @@ import it.mmzitarosa.guitartortona.repository.AuditLogRepository;
 import it.mmzitarosa.guitartortona.repository.ProductRepository;
 import it.mmzitarosa.guitartortona.repository.PurchaseItemRepository;
 import it.mmzitarosa.guitartortona.repository.SaleRepository;
+import it.mmzitarosa.guitartortona.repository.StockAdjustmentRepository;
 import it.mmzitarosa.guitartortona.security.CurrentUser;
 import it.mmzitarosa.guitartortona.specification.ProductVisibilitySpecification;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +46,7 @@ public class ProductTimelineService {
 	private final ProductRepository productRepository;
 	private final PurchaseItemRepository purchaseItemRepository;
 	private final SaleRepository saleRepository;
+	private final StockAdjustmentRepository stockAdjustmentRepository;
 	private final AuditLogRepository auditRepository;
 	private final CurrentUser currentUser;
 
@@ -81,6 +83,12 @@ public class ProductTimelineService {
 		}
 		entries.addAll(sales.values());
 
+		stockAdjustmentRepository.findByProductId(productId).forEach(a -> {
+			String users = users(audit.stream().filter(l -> "StockAdjustment".equals(l.getEntityType()) && a.getId().equals(l.getEntityId())).toList(), admin);
+			entries.add(Entry.builder().type(STOCK_ADJUSTMENT).date(a.getCreatedDate().toLocalDate()).at(a.getCreatedDate()).users(users)
+					.quantity(a.getQuantity()).previousStock(a.getPreviousStock()).countedStock(a.getCountedStock()).notes(a.getReason()).build());
+		});
+
 		entries.sort(Comparator.comparing(Entry::date, Comparator.nullsLast(Comparator.reverseOrder()))
 				.thenComparingInt(e -> rank(e.type()))
 				.thenComparing(Entry::at, Comparator.nullsLast(Comparator.reverseOrder())));
@@ -90,7 +98,7 @@ public class ProductTimelineService {
 	/** A parità di giorno: vendite, modifiche, acquisti, creazione del prodotto. */
 	private int rank(String type) {
 		return switch (type) {
-			case SALE -> 0;
+			case SALE, STOCK_ADJUSTMENT -> 0;
 			case PRODUCT_CHANGE, PURCHASE_CHANGE -> 1;
 			case PURCHASE -> 2;
 			default -> 3;

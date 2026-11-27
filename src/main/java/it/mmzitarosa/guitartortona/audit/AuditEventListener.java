@@ -7,6 +7,7 @@ import it.mmzitarosa.guitartortona.entity.IdEntity;
 import it.mmzitarosa.guitartortona.entity.ProductEntity;
 import it.mmzitarosa.guitartortona.entity.PurchaseItemEntity;
 import it.mmzitarosa.guitartortona.entity.SaleEntity;
+import it.mmzitarosa.guitartortona.entity.StockAdjustmentEntity;
 import it.mmzitarosa.guitartortona.security.CurrentUser;
 import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManagerFactory;
@@ -129,7 +130,8 @@ public class AuditEventListener implements PostInsertEventListener, PostUpdateEv
 	/** Prodotto a cui si riferisce la riga, così la storia di un prodotto comprende anche acquisti e vendite. */
 	private Long productId(Object entity, Object id) {
 		if (entity instanceof ProductEntity) return ((Number) id).longValue();
-		ProductEntity product = entity instanceof PurchaseItemEntity item ? item.getProduct() : entity instanceof SaleEntity sale ? sale.getProduct() : null;
+		ProductEntity product = entity instanceof PurchaseItemEntity item ? item.getProduct() : entity instanceof SaleEntity sale ? sale.getProduct()
+				: entity instanceof StockAdjustmentEntity adjustment ? adjustment.getProduct() : null;
 		return product == null ? null : product.getId();
 	}
 

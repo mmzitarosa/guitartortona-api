@@ -7,9 +7,11 @@ import it.mmzitarosa.guitartortona.dto.product.ProductInput;
 import it.mmzitarosa.guitartortona.dto.product.ProductListDTO;
 import it.mmzitarosa.guitartortona.dto.sale.CartSaleInput;
 import it.mmzitarosa.guitartortona.dto.sale.SaleInput;
+import it.mmzitarosa.guitartortona.dto.stock.StockAdjustmentInput;
 import it.mmzitarosa.guitartortona.service.ProductService;
 import it.mmzitarosa.guitartortona.service.ProductTimelineService;
 import it.mmzitarosa.guitartortona.service.SaleService;
+import it.mmzitarosa.guitartortona.service.StockAdjustmentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
@@ -26,6 +28,7 @@ public class ProductController {
 
 	private final ProductService service;
 	private final SaleService saleService;
+	private final StockAdjustmentService stockAdjustmentService;
 	private final ProductTimelineService timelineService;
 
 	/* == READ == */
@@ -64,6 +67,11 @@ public class ProductController {
 	@PostMapping("/product/{id}/sell")
 	public ResponseEntity<ProductDetailDTO> addProductSale(@PathVariable long id, @Valid @RequestBody SaleInput request) {
 		return ResponseEntity.ok(saleService.addProductSale(id, request));
+	}
+
+	@PostMapping("/product/{id}/stockAdjustment")
+	public ResponseEntity<ProductDetailDTO> adjustStock(@PathVariable long id, @Valid @RequestBody StockAdjustmentInput request) {
+		return ResponseEntity.ok(stockAdjustmentService.adjustStock(id, request));
 	}
 
 	@PostMapping("/sales")

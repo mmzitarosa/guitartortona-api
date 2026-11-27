@@ -19,11 +19,13 @@ public record ProductTimelineDTO(int purchased, int sold, List<Entry> entries) {
 	public static final String PURCHASE_CHANGE = "PURCHASE_CHANGE";
 	public static final String PRODUCT_CHANGE = "PRODUCT_CHANGE";
 	public static final String PRODUCT_CREATED = "PRODUCT_CREATED";
+	public static final String STOCK_ADJUSTMENT = "STOCK_ADJUSTMENT";
 
 	/**
 	 * Una voce. {@code price} è il costo unitario imponibile per gli acquisti e il prezzo di vendita per le vendite;
 	 * {@code previousPrice}/{@code previousVat} sono i valori prima di una modifica (solo se cambiati);
 	 * {@code superseded} elenca i campi poi sovrascritti da una modifica successiva.
+	 * Per una rettifica inventariale {@code quantity} è la differenza con segno, {@code notes} il motivo.
 	 */
 	@Builder
 	public record Entry(
@@ -32,6 +34,8 @@ public record ProductTimelineDTO(int purchased, int sold, List<Entry> entries) {
 			@JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss") LocalDateTime at,
 			String users,
 			Integer quantity,
+			Integer previousStock,
+			Integer countedStock,
 			Double price,
 			Double vat,
 			Double previousPrice,
